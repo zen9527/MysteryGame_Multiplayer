@@ -13,10 +13,15 @@ _default_script = Script(
     difficulty="简单",
     estimated_time=60,
     background_story="默认剧本背景",
-    true_killer="未知",
+    true_killer="角色 A",
     murder_method="默认",
     cover_up="默认",
-    roles=[Role(name="玩家1", age=20, occupation="学生", description="描述", background="背景", secret_task="任务", alibi="不在场证明", motive="动机")],
+    roles=[
+        Role(name="角色 A", age=30, occupation="医生", description="描述", background="背景", secret_task="任务", alibi="不在场证明", motive="动机"),
+        Role(name="角色 B", age=25, occupation="教师", description="描述", background="背景", secret_task="任务", alibi="不在场证明", motive="动机"),
+        Role(name="角色 C", age=28, occupation="律师", description="描述", background="背景", secret_task="任务", alibi="不在场证明", motive="动机"),
+        Role(name="角色 D", age=35, occupation="警察", description="描述", background="背景", secret_task="任务", alibi="不在场证明", motive="动机"),
+    ],
     clues=[Clue(title="线索1", content="内容", content_hint="提示")],
     plot_outline=PlotOutline(act1="第一幕", act2="第二幕", act3="第三幕"),
 )
