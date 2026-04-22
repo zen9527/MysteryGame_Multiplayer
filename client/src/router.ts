@@ -1,10 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import RoomList from '../components/RoomList.vue';
-import RoomJoin from '../components/RoomJoin.vue';
-import WaitingLobby from '../components/WaitingLobby.vue';
-import GameTimer from '../components/GameTimer.vue';
-import TrialPanel from '../components/TrialPanel.vue';
-import RevealPanel from '../components/RevealPanel.vue';
+import RoomList from './components/RoomList.vue';
+import RoomJoin from './components/RoomJoin.vue';
+import WaitingLobby from './components/WaitingLobby.vue';
+import GameTimer from './components/GameTimer.vue';
+import TrialPanel from './components/TrialPanel.vue';
+import RevealPanel from './components/RevealPanel.vue';
 
 const routes = [
   { path: '/', component: RoomList },
