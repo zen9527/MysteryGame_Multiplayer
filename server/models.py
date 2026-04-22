@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from datetime import datetime
 import uuid
+from datetime import datetime
 
 
 class Role(BaseModel):
@@ -14,7 +14,7 @@ class Role(BaseModel):
     secret_task: str
     alibi: str
     motive: str
-    relationships: List[dict] = Field(default_factory=list)
+    relationships: List[dict[str, str]] = Field(default_factory=list)
 
 
 class Clue(BaseModel):
@@ -47,7 +47,7 @@ class Script(BaseModel):
 
 
 class Player(BaseModel):
-    id: str
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     role_id: str
     status: str = "connected"  # connected/playing/left
@@ -91,4 +91,4 @@ class GameState(BaseModel):
     timer_start: datetime = Field(default_factory=datetime.now)
     max_duration_minutes: int = 60
     current_round: int = 0
-    host_message_history: List[str] = Field(default_factory=list)
+    host_message_history: List[Message] = Field(default_factory=list)
