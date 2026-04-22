@@ -50,6 +50,7 @@ class Player(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     role_id: str
+    role: Optional[Role] = None
     status: str = "connected"  # connected/playing/left
     has_read_role: bool = False
 
@@ -91,4 +92,4 @@ class GameState(BaseModel):
     timer_start: datetime = Field(default_factory=datetime.now)
     max_duration_minutes: int = 60
     current_round: int = 0
-    host_message_history: List[Message] = Field(default_factory=list)
+    host_message_history: List[str] = Field(default_factory=list)
