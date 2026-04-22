@@ -28,6 +28,11 @@ class GameManager:
         state.players[player_id] = player
         return player
 
+    def set_script(self, game_id: str, script: Script):
+        """设置剧本（LLM 生成后）"""
+        if game_id in self.games:
+            self.games[game_id].script = script
+
     def start_game(self, game_id: str):
         if game_id in self.games:
             self.games[game_id].phase = "playing"
@@ -39,6 +44,19 @@ class GameManager:
                 state.public_messages.append(message)
             elif message.type == "private":
                 state.private_messages.append(message)
+
+    def add_chat_message(self, game_id: str, player_id: str, content: str, is_private: bool = False, target_player_id: Optional[str] = None):
+        """快捷发送聊天消息（从 API 调用）"""
+        if game_id not in self.games:
+            return
+        state = self.games[game_id]
+        msg = Message(
+            from_player_id=player_id,
+            content=content,
+            type="private" if is_private else "public",
+            to_player_id=target_player_id,
+        )
+        self.add_message(game_id, msg)
 
     def add_accusation(self, game_id: str, accusation: Accusation):
         if game_id in self.games:

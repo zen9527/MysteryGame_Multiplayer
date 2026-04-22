@@ -11,8 +11,8 @@
     </div>
     <div class="evaluations">
       <h2>玩家评价</h2>
-      <div v-for="(eval, name) in evaluations" :key="name">
-        <strong>{{ name }}</strong>: {{ eval }}
+      <div v-for="(evaluation, name) in evaluations" :key="name">
+        <strong>{{ name }}</strong>: {{ evaluation }}
       </div>
     </div>
     <button @click="backToRoom">返回房间列表</button>
