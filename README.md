@@ -1,111 +1,97 @@
-# 🎭 剧本杀 - LLM 驱动单机版
+# 🎭 剧本杀 - LLM 驱动多人在线版
 
-基于 PyQt6 + Python 的完全重构版本，由本地 LLM 自动主持的谋杀之谜游戏系统。
+基于 FastAPI + Vue 3 的 Web 版谋杀之谜游戏系统，由本地 LLM 自动担任 DM 主持人。
 
 ## ✨ 特性
 
-- **完整游戏流程**：从选本到复盘的 8 个阶段全部实现
-- **LLM 自动生成**：根据玩家人数和剧本分类自动生成完整剧本
-- **逐个阅读角色卡**：DM 控制，玩家只能看到自己的秘密
-- **搜证系统**：多阶段线索解锁、红鲱鱼（误导线索）机制
-- **公聊 + 私聊**：完整的讨论环节支持
-- **多轮投票**：支持平票处理和最终揭晓
-- **复盘总结**：真相揭示、关键证据对比
+- **多人在线** — WebSocket 实时通信，局域网即可开局
+- **LLM 全权主持** — 自动生成剧本、角色卡、线索、复盘总结
+- **6 种剧本类型** — 悬疑推理 / 古风权谋 / 现代都市 / 恐怖惊悚 / 欢乐搞笑 / 科幻未来
+- **完整游戏流程** — 选本 → 生成剧本 → 阅读角色卡 → 自我介绍 → 搜证 → 讨论 → 投票 → 审判 → 揭晓 → 复盘
+- **公聊 + 私聊** — 全局讨论与玩家间一对一私聊
+- **审判系统** —  accusation + 多轮投票 + 真相揭晓
 
 ## 🚀 快速开始
 
 ### 1. 安装依赖
 
 ```bash
+# 后端
 pip install -r requirements.txt
+
+# 前端
+cd client
+npm install
 ```
 
 ### 2. 配置 LLM 服务器
 
-编辑 `.env` 文件：
+复制 `.env.example` 为 `.env` 并编辑：
 
 ```ini
 LLM_SERVER_URL=http://192.168.1.107:12340
 LLM_API_KEY=your_api_key_here
-LLM_MODEL=model
+LLM_MODEL=qwen3.5-122b-a10b
 ```
 
-### 3. 启动游戏
+### 3. 启动
 
 ```bash
-python main.py
-# 或使用启动脚本
-启动.bat
+# 后端（Terminal 1）
+uvicorn server.main:app --host 0.0.0.0 --port 8000
+
+# 前端（Terminal 2）
+cd client
+npm run dev
 ```
 
-## 📖 游戏流程
-
-1. **玩家加入** - 添加至少 2 名玩家，选择剧本分类
-2. **生成剧本** - LLM 自动生成完整剧本（约 2-5 分钟）
-3. **阅读角色卡** - DM 逐个分配，玩家单独阅读自己的角色
-4. **自我介绍** - 每位玩家介绍角色背景和关系
-5. **搜证环节** - 多阶段解锁线索，可以公开或私聊取证
-6. **讨论环节** - 公聊（所有人可见）+ 私聊（一对一）
-7. **投票环节** - 多轮投票选出凶手
-8. **复盘揭晓** - DM 揭示真相
+打开浏览器访问 `http://localhost:5173`。
 
 ## 📁 项目结构
 
 ```
 剧本杀/
-├── main.py                      # 入口点
-├── config.py                    # 配置管理（.env 文件）
-├── models.py                    # 数据模型
-├── game_manager.py              # 游戏状态管理
-├── llm_client.py                # LLM API 客户端
+├── server/                    # FastAPI 后端
+│   ├── main.py                # 应用入口
+│   ├── config.py              # 配置管理
+│   ├── llm_client.py          # LLM API 客户端（SSE 流式）
+│   ├── models.py              # Pydantic 数据模型
+│   ├── game_manager.py        # 游戏状态管理
+│   ├── host_dm.py             # LLM 主持人逻辑
+│   ├── websocket_hub.py       # WebSocket 房间管理
+│   ├── api_routes.py          # REST API 路由
+│   └── middleware.py          # CORS 中间件
 │
-├── ui/                          # UI 组件包
-│   ├── main_window.py           # 主窗口
-│   └── widgets/                 # UI 组件
-│       ├── waiting_stage.py     # 等待阶段
-│       ├── generating_stage.py  # 剧本生成中
-│       ├── reading_roles_stage.py    # 阅读角色卡
-│       ├── self_introduction_stage.py # 自我介绍
-│       ├── evidence_search_stage.py   # 搜证系统
-│       ├── discussion_stage.py      # 讨论环节
-│       ├── voting_stage.py          # 投票系统
-│       └── review_stage.py          # 复盘揭晓
+├── client/                    # Vue 3 前端
+│   ├── src/
+│   │   ├── App.vue
+│   │   ├── main.ts
+│   │   ├── stores/game.ts     # Pinia 状态管理
+│   │   ├── types/ws.ts        # WebSocket 类型定义
+│   │   ├── utils/ws.ts        # WebSocket 连接管理
+│   │   └── components/        # 11 个 UI 组件
+│   └── tests/                 # 前端组件测试
 │
-├── tests/                       # 测试用例
-│   └── test_all.py              # 100+ 测试，74% 覆盖率
+├── shared/                    # 共享类型/Schema
+│   ├── ws_types.py            # 后端 Pydantic 校验
+│   └── schemas.ts             # 前端 Zod 校验
 │
-├── docs/                        # 文档
-│   ├── PROJECT_STRUCTURE.md     # 项目结构说明
-│   ├── REFACTORING_REPORT.md    # 重构报告
-│   └── DEVELOPMENT_REPORT.md    # 开发报告
-│
-├── assets/                      # 资源文件（图片、音效等）
-│
-├── .env                         # 本地配置（API Key）
-├── requirements.txt             # 依赖列表
-├── .gitignore                   # Git 忽略文件
-└── 启动.bat                     # Windows 启动脚本
+├── tests/                     # 后端单元测试 & 集成测试
+├── docs/                      # 设计与实施文档
+├── requirements.txt           # Python 依赖
+└── .gitignore
 ```
 
 ## 🧪 运行测试
 
 ```bash
-pytest tests/test_all.py -v --cov=. --cov-report=term-missing
+# 后端测试
+pytest tests/ -v
+
+# 前端测试
+cd client
+npm test
 ```
-
-## 📚 文档
-
-- [项目结构说明](docs/PROJECT_STRUCTURE.md)
-- [重构报告](docs/REFACTORING_REPORT.md)
-- [开发报告](docs/DEVELOPMENT_REPORT.md)
-
-## 🔮 未来计划
-
-- [ ] 完善存档/读档功能
-- [ ] LLM 辅助 DM（自动生成复盘总结）
-- [ ] 多人在线模式（WebSocket）
-- [ ] 剧本编辑器
-- [ ] 音效和背景音乐支持
 
 ## 📄 许可证
 
@@ -114,4 +100,4 @@ pytest tests/test_all.py -v --cov=. --cov-report=term-missing
 ---
 
 **作者**: Flex  
-**版本**: v2.0.0
+**版本**: v3.0.0

@@ -1,3 +1,0 @@
-@echo off
-echo 启动剧本杀服务器...
-python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
