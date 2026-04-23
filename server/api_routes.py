@@ -1,40 +1,46 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 from server.models import Script, Role, Clue, PlotOutline, Vote
 from server.game_manager import manager
+from server.host_dm import host as host_dm
+from server.middleware import require_admin
 import uuid
 
 router = APIRouter()
 
+# --- Genre constants ---
+GENRES = [
+    {"value": "悬疑推理", "label": "经典谋杀案，逻辑推理"},
+    {"value": "古风权谋", "label": "古代宫廷/江湖，权力斗争"},
+    {"value": "现代都市", "label": "当代社会背景，情感纠葛"},
+    {"value": "恐怖惊悚", "label": "超自然元素，心理恐惧"},
+    {"value": "欢乐搞笑", "label": "轻松幽默，反转结局"},
+    {"value": "科幻未来", "label": "赛博朋克/太空，高科技犯罪"},
+]
 
-_default_script = Script(
-    title="默认剧本",
-    genre="悬疑推理",
-    difficulty="简单",
-    estimated_time=60,
-    background_story="默认剧本背景",
-    true_killer="角色 A",
-    murder_method="默认",
-    cover_up="默认",
-    roles=[
-        Role(name="角色 A", age=30, occupation="医生", description="描述", background="背景", secret_task="任务", alibi="不在场证明", motive="动机"),
-        Role(name="角色 B", age=25, occupation="教师", description="描述", background="背景", secret_task="任务", alibi="不在场证明", motive="动机"),
-        Role(name="角色 C", age=28, occupation="律师", description="描述", background="背景", secret_task="任务", alibi="不在场证明", motive="动机"),
-        Role(name="角色 D", age=35, occupation="警察", description="描述", background="背景", secret_task="任务", alibi="不在场证明", motive="动机"),
-    ],
-    clues=[Clue(title="线索1", content="内容", content_hint="提示")],
-    plot_outline=PlotOutline(act1="第一幕", act2="第二幕", act3="第三幕"),
-)
+DIFFICULTIES = ["简单", "中等", "困难"]
 
 
-# --- Request/Response models ---
+# --- Request models ---
 
 class PlayerJoinRequest(BaseModel):
     player_id: str
     name: str
 
 
+class CreateRoomRequest(BaseModel):
+    creator_id: str  # 管理员ID
+
+
 class ScriptGenerationRequest(BaseModel):
+    genre: str
+    difficulty: str = "中等"
+    estimated_time: int = 90
+    player_count: int = 4
+
+
+class SetScriptRequest(BaseModel):
     script: Script
 
 
@@ -48,21 +54,46 @@ class ChatMessageRequest(BaseModel):
     player_id: str
     message: str
     is_private: bool = False
-    target_player_id: str | None = None
+    target_player_id: Optional[str] = None
+
+
+class AdminActionRequest(BaseModel):
+    player_id: str  # 管理员ID，用于权限校验
+
+
+class PushEventRequest(BaseModel):
+    player_id: str
+    event_content: str
+
+
+class AddClueRequest(BaseModel):
+    player_id: str
+    clue_title: str
+    clue_content: str
 
 
 # --- Room endpoints ---
 
 @router.post("/api/rooms")
-async def create_room():
+async def create_room(req: CreateRoomRequest):
     game_id = str(uuid.uuid4())
-    manager.create_game(game_id, _default_script)
+    manager.create_game(game_id, req.creator_id)
     return {"game_id": game_id}
 
 
 @router.get("/api/rooms")
 async def list_rooms():
-    return [{"game_id": gid, "player_count": len(state.players), "phase": state.phase} for gid, state in manager.games.items()]
+    return [
+        {
+            "game_id": gid,
+            "player_count": len(state.players),
+            "phase": state.phase,
+            "act": state.act,
+            "script_generated": state.script_generated,
+            "title": state.script.title if state.script.title != "待生成" else "",
+        }
+        for gid, state in manager.games.items()
+    ]
 
 
 @router.get("/api/rooms/{game_id}")
@@ -73,9 +104,25 @@ async def get_room(game_id: str):
     return {
         "game_id": state.game_id,
         "phase": state.phase,
-        "players": {pid: {"name": p.name, "role_id": p.role_id} for pid, p in state.players.items()},
+        "act": state.act,
+        "room_creator_id": state.room_creator_id,
+        "script_generated": state.script_generated,
+        "players": {
+            pid: {
+                "name": p.name,
+                "role_id": p.role_id,
+                "role_name": p.role.name if p.role else "",
+            }
+            for pid, p in state.players.items()
+        },
+        "script": {
+            "title": state.script.title,
+            "genre": state.script.genre,
+            "roles_count": len(state.script.roles),
+        } if state.script_generated else None,
         "clues": [c.model_dump() for c in state.script.clues],
         "votes": [v.model_dump() for v in state.votes],
+        "public_messages": [m.model_dump() for m in state.public_messages[-50:]],  # last 50
     }
 
 
@@ -95,7 +142,7 @@ async def add_player(game_id: str, req: PlayerJoinRequest):
         raise HTTPException(status_code=404, detail="Room not found")
     player = manager.add_player(game_id, req.player_id, req.name)
     if player is None:
-        raise HTTPException(status_code=400, detail="Room is full (max 6 players)")
+        raise HTTPException(status_code=400, detail="房间已满或剧本未生成")
     return {"player_id": player.id, "name": player.name, "role_id": player.role_id}
 
 
@@ -104,21 +151,128 @@ async def list_players(game_id: str):
     state = manager.get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
-    return {pid: {"name": p.name, "role_id": p.role_id} for pid, p in state.players.items()}
+    return {
+        pid: {"name": p.name, "role_id": p.role_id}
+        for pid, p in state.players.items()
+    }
 
 
-# --- Game control endpoints ---
+# --- Script generation endpoints (admin only) ---
 
-@router.post("/api/rooms/{game_id}/generate")
+@router.post("/api/rooms/{game_id}/generate-script")
 async def generate_script(game_id: str, req: ScriptGenerationRequest):
+    """触发LLM生成剧本（仅管理员）"""
     state = manager.get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
     if state.phase != "waiting":
-        raise HTTPException(status_code=400, detail="Can only generate script in waiting phase")
-    manager.set_script(game_id, req.script)
-    return {"game_id": game_id, "phase": state.phase}
+        raise HTTPException(status_code=400, detail="只能在等待阶段生成剧本")
 
+    # Build detailed prompt for LLM
+    user_prompt = f"""请生成一个完整的剧本杀剧本，以JSON格式返回。
+
+类型：{req.genre}
+难度：{req.difficulty}
+预计时长：{req.estimated_time}分钟
+玩家数量：{req.player_count}人（需要{req.player_count}个角色）
+
+JSON格式要求：
+{{
+  "title": "剧本标题",
+  "genre": "{req.genre}",
+  "difficulty": "{req.difficulty}",
+  "estimated_time": {req.estimated_time},
+  "background_story": "背景故事（200-500字）",
+  "true_killer": "凶手角色名",
+  "murder_method": "作案手法描述",
+  "cover_up": "掩盖手段描述",
+  "roles": [
+    {{
+      "id": "role_1",
+      "name": "角色名",
+      "age": 年龄数字,
+      "occupation": "职业",
+      "description": "简短描述",
+      "background": "个人背景故事（100-200字）",
+      "secret_task": "秘密任务",
+      "alibi": "不在场证明",
+      "motive": "作案动机",
+      "relationships": []
+    }}
+  ],
+  "clues": [
+    {{
+      "id": "clue_1",
+      "title": "线索标题",
+      "content": "线索内容描述",
+      "target_role": null,
+      "is_red_herring": false,
+      "content_hint": "提示"
+    }}
+  ],
+  "plot_outline": {{
+    "act1": "第一幕概述（背景介绍）",
+    "act2": "第二幕概述（自由调查）",
+    "act3": "第三幕概述（审判揭晓）"
+  }}
+}}
+
+注意：
+- 确保有{req.player_count}个角色
+- 每个角色的id必须是唯一的（role_1, role_2...）
+- 线索数量至少5条
+- 凶手必须是其中一个角色"""
+
+    try:
+        raw_json = host_dm.generate_script(
+            "你是一名剧本杀设计师，请生成完整的剧本。只返回JSON，不要其他内容。",
+            user_prompt,
+        )
+        # Parse JSON from LLM response
+        import json
+        # Handle markdown code blocks
+        if "```json" in raw_json:
+            raw_json = raw_json.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw_json:
+            raw_json = raw_json.split("```")[1].split("```")[0].strip()
+
+        script_dict = json.loads(raw_json)
+        script = Script(**script_dict)
+
+        manager.set_script(game_id, script)
+        state.script_generated = True
+
+        return {
+            "status": "generated",
+            "title": script.title,
+            "roles_count": len(script.roles),
+            "clues_count": len(script.clues),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"剧本生成失败: {str(e)}")
+
+
+@router.post("/api/rooms/{game_id}/set-script")
+async def set_script(game_id: str, req: SetScriptRequest):
+    """手动设置剧本（管理员编辑后保存）"""
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if state.phase != "waiting":
+        raise HTTPException(status_code=400, detail="只能在等待阶段设置剧本")
+
+    manager.set_script(game_id, req.script)
+    state.script_generated = True
+    return {"status": "saved", "title": req.script.title}
+
+
+@router.get("/api/genres")
+async def list_genres():
+    """返回可用的剧本类型列表"""
+    return {"genres": GENRES, "difficulties": DIFFICULTIES}
+
+
+# --- Game control endpoints ---
 
 @router.post("/api/rooms/{game_id}/start")
 async def start_game(game_id: str):
@@ -126,9 +280,96 @@ async def start_game(game_id: str):
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
     if len(state.players) < 2:
-        raise HTTPException(status_code=400, detail="Need at least 2 players to start")
+        raise HTTPException(status_code=400, detail="至少需要2名玩家才能开始")
+    if not state.script_generated:
+        raise HTTPException(status_code=400, detail="先生成剧本再开始游戏")
     manager.start_game(game_id)
     return {"game_id": game_id, "phase": state.phase}
+
+
+# --- Admin emergency controls (admin only) ---
+
+@router.post("/api/rooms/{game_id}/dm/push-event")
+async def push_event(game_id: str, req: PushEventRequest):
+    """手动推进剧情（仅管理员）"""
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+
+    # Use LLM to generate next event based on current state
+    try:
+        event_content = host_dm.generate_event(state)
+        manager.push_event(game_id, event_content)
+        return {"status": "event_pushed", "content": event_content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"事件生成失败: {str(e)}")
+
+
+@router.post("/api/rooms/{game_id}/dm/add-clue")
+async def add_clue(game_id: str, req: AddClueRequest):
+    """追加自定义线索（仅管理员）"""
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+
+    manager.add_clue(game_id, req.clue_title, req.clue_content)
+    # Also push as event message
+    manager.push_event(game_id, f"🔍 新线索发现：{req.clue_title} — {req.clue_content}")
+    return {"status": "clue_added"}
+
+
+@router.post("/api/rooms/{game_id}/force-trial")
+async def force_trial(game_id: str, req: AdminActionRequest):
+    """强制进入审判（仅管理员）"""
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+
+    manager.force_trial(game_id)
+    return {"status": "trial_started", "phase": state.phase}
+
+
+@router.post("/api/rooms/{game_id}/end-game")
+async def end_game(game_id: str, req: AdminActionRequest):
+    """提前结束游戏（仅管理员）"""
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+
+    # Generate truth reveal via LLM
+    try:
+        reveal_content = host_dm.generate_event(state)  # reuse for now
+        manager.push_event(game_id, f"📢 真相揭晓：{reveal_content}")
+    except Exception:
+        pass
+
+    manager.end_game(game_id)
+    return {"status": "game_ended", "phase": state.phase}
+
+
+@router.post("/api/rooms/{game_id}/players/{target_pid}/kick")
+async def kick_player(game_id: str, target_pid: str, req: AdminActionRequest):
+    """踢出玩家（仅管理员）"""
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+
+    manager.kick_player(game_id, target_pid)
+    return {"status": "kicked", "target_player_id": target_pid}
+
+
+@router.get("/api/rooms/{game_id}/dm/log")
+async def get_dm_log(game_id: str):
+    """获取DM推理日志"""
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return {"dm_log": state.dm_log}
 
 
 # --- Voting endpoints ---
@@ -138,7 +379,11 @@ async def add_vote(game_id: str, req: VoteRequest):
     state = manager.get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
-    vote = Vote(from_player_id=req.from_player_id, target_role_name=req.target_role_name, reasoning=req.reasoning)
+    vote = Vote(
+        from_player_id=req.from_player_id,
+        target_role_name=req.target_role_name,
+        reasoning=req.reasoning,
+    )
     manager.add_vote(game_id, vote)
     return {"status": "vote recorded"}
 
@@ -149,7 +394,10 @@ async def check_consensus(game_id: str):
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
     reached = manager.check_consensus(game_id)
-    return {"consensus_reached": reached, "votes": [v.model_dump() for v in state.votes]}
+    return {
+        "consensus_reached": reached,
+        "votes": [v.model_dump() for v in state.votes],
+    }
 
 
 # --- Chat endpoints ---
@@ -161,22 +409,34 @@ async def send_message(game_id: str, req: ChatMessageRequest):
         raise HTTPException(status_code=404, detail="Room not found")
     if req.player_id not in state.players:
         raise HTTPException(status_code=400, detail="Player not in room")
-    manager.add_chat_message(game_id, req.player_id, req.message, req.is_private, req.target_player_id)
+    manager.add_chat_message(
+        game_id, req.player_id, req.message, req.is_private, req.target_player_id
+    )
     return {"status": "message sent"}
 
 
-# --- Host DM endpoints ---
+# --- LLM test endpoint ---
 
-@router.post("/api/rooms/{game_id}/host-message")
-async def host_message(game_id: str, req: ChatMessageRequest):
-    state = manager.get_state(game_id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Room not found")
-    manager.add_chat_message(game_id, "__host__", req.message, False, None)
-    return {"status": "host message sent"}
+@router.post("/api/test-llm")
+async def test_llm():
+    """测试LLM连接"""
+    try:
+        import time
+        start = time.time()
+        result = host_dm.llm.generate_script(
+            "你是一个助手。",
+            "请用一句话回复'连接正常'"
+        )
+        elapsed = time.time() - start
+        return {
+            "status": "connected",
+            "response_time_ms": round(elapsed * 1000),
+            "model": host_dm.llm.model,
+            "sample_response": result[:200],
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
-
-# --- WebSocket endpoint ---
 
 @router.get("/api/health")
 async def health_check():
