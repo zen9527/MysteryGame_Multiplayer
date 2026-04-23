@@ -83,6 +83,8 @@ class Vote(BaseModel):
 class GameState(BaseModel):
     game_id: str
     phase: str  # waiting/playing/trial/revealed/finished
+    act: int = 1  # 1=背景介绍, 2=自由调查, 3=审判揭晓
+    room_creator_id: str = ""  # 管理员ID（房间创建者）
     players: dict[str, Player]
     script: Script
     public_messages: List[Message] = Field(default_factory=list)
@@ -93,3 +95,5 @@ class GameState(BaseModel):
     max_duration_minutes: int = 60
     current_round: int = 0
     host_message_history: List[str] = Field(default_factory=list)
+    dm_log: List[str] = Field(default_factory=list)  # LLM推理日志
+    script_generated: bool = False  # 是否已生成剧本
