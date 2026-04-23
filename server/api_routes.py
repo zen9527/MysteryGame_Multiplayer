@@ -72,6 +72,12 @@ class AddClueRequest(BaseModel):
     clue_content: str
 
 
+class LLMConfigRequest(BaseModel):
+    endpoint: Optional[str] = None
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+
+
 # --- Room endpoints ---
 
 @router.post("/api/rooms")
@@ -415,27 +421,64 @@ async def send_message(game_id: str, req: ChatMessageRequest):
     return {"status": "message sent"}
 
 
-# --- LLM test endpoint ---
+# --- LLM config endpoints ---
+
+@router.get("/api/llm-config")
+async def get_llm_config():
+    """获取当前 LLM 配置（api_key 脱敏）"""
+    return host_dm.llm.get_config()
+
+
+@router.post("/api/llm-config")
+async def update_llm_config(req: LLMConfigRequest):
+    """更新 LLM 配置（运行时生效，不持久化到 .env）"""
+    host_dm.llm.set_runtime_config(
+        endpoint=req.endpoint,
+        model=req.model,
+        api_key=req.api_key,
+    )
+    return {"status": "updated", **host_dm.llm.get_config()}
+
 
 @router.post("/api/test-llm")
-async def test_llm():
-    """测试LLM连接"""
+async def test_llm(req: Optional[LLMConfigRequest] = None):
+    """测试 LLM 连接。可传入可选配置进行临时测试（不保存）。"""
+    # Save original config for restore
+    orig_endpoint = host_dm.llm.endpoint
+    orig_model = host_dm.llm.model
+    orig_api_key = host_dm.llm.api_key
+    did_override = False
+
+    if req and (req.endpoint or req.model or req.api_key):
+        host_dm.llm.set_runtime_config(
+            endpoint=req.endpoint or orig_endpoint,
+            model=req.model or orig_model,
+            api_key=req.api_key or orig_api_key,
+        )
+        did_override = True
+
     try:
         import time
         start = time.time()
-        result = host_dm.llm.generate_script(
-            "你是一个助手。",
-            "请用一句话回复'连接正常'"
-        )
+        result = host_dm.llm.test_connection()
         elapsed = time.time() - start
         return {
             "status": "connected",
             "response_time_ms": round(elapsed * 1000),
             "model": host_dm.llm.model,
+            "endpoint": host_dm.llm.endpoint,
             "sample_response": result[:200],
         }
     except Exception as e:
         return {"status": "error", "detail": str(e)}
+    finally:
+        # Restore original config if we temporarily overrode it
+        if did_override:
+            host_dm.llm.set_runtime_config(
+                endpoint=orig_endpoint,
+                model=orig_model,
+                api_key=orig_api_key,
+            )
 
 
 @router.get("/api/health")

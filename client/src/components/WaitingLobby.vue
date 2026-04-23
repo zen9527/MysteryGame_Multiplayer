@@ -7,14 +7,48 @@
     <div v-if="isAdmin" class="admin-section">
       <h2>⚙️ 管理员设置</h2>
 
-      <!-- LLM Test -->
-      <div class="llm-test-row">
-        <button @click="testLLM" :disabled="testingLLM" class="test-btn">
-          {{ testingLLM ? `测试中... (${llmTestResult?.response_time_ms || 0}ms)` : '🔌 测试 LLM 连接' }}
-        </button>
-        <span v-if="llmTestStatus" :class="'status-' + llmTestStatus">
-          {{ llmTestStatus === 'connected' ? '✅ 已连接' : '❌ 连接失败' }}
-        </span>
+      <!-- LLM Config -->
+      <div class="llm-config-panel" :class="{ expanded: llmConfigExpanded }">
+        <div class="llm-config-header" @click="llmConfigExpanded = !llmConfigExpanded">
+          <span>🔌 LLM 配置</span>
+          <span class="expand-icon">{{ llmConfigExpanded ? '▲' : '▼' }}</span>
+        </div>
+        <div v-if="llmConfigExpanded" class="llm-config-body">
+          <div class="config-field">
+            <label>API 端点</label>
+            <input v-model="llmEndpoint" placeholder="http://127.0.0.1:12340" />
+          </div>
+          <div class="config-field">
+            <label>模型名称</label>
+            <input v-model="llmModel" placeholder="qwen3.5-122b-a10b" />
+          </div>
+          <div class="config-field">
+            <label>API Key</label>
+            <div class="key-input-row">
+              <input
+                v-model="llmApiKey"
+                :type="showApiKey ? 'text' : 'password'"
+                placeholder="sk-..."
+              />
+              <button class="toggle-key-btn" @click="showApiKey = !showApiKey" type="button">
+                {{ showApiKey ? '隐藏' : '显示' }}
+              </button>
+            </div>
+          </div>
+          <div class="config-actions">
+            <button @click="saveLLMConfig" :disabled="savingConfig" class="save-btn">
+              {{ savingConfig ? '保存中...' : '💾 保存配置' }}
+            </button>
+            <button @click="testLLM" :disabled="testingLLM" class="test-btn">
+              {{ testingLLM ? `测试中... (${llmTestResult?.response_time_ms || 0}ms)` : '🔌 测试连接' }}
+            </button>
+            <span v-if="llmTestStatus" :class="'status-' + llmTestStatus">
+              {{ llmTestStatus === 'connected' ? '✅ 已连接' : '❌ 连接失败' }}
+            </span>
+            <span v-if="llmTestError" class="error-msg">{{ llmTestError }}</span>
+          </div>
+          <p v-if="configSaved" class="success-msg">配置已保存</p>
+        </div>
       </div>
 
       <!-- Genre Selection -->
@@ -106,10 +140,20 @@ const generating = ref(false);
 const generatedScript = ref<any | null>(null);
 const genError = ref('');
 
+// LLM config
+const llmConfigExpanded = ref(false);
+const llmEndpoint = ref('');
+const llmModel = ref('');
+const llmApiKey = ref('');
+const showApiKey = ref(false);
+const savingConfig = ref(false);
+const configSaved = ref(false);
+
 // LLM test
 const testingLLM = ref(false);
 const llmTestStatus = ref<'connected' | 'error' | ''>('');
 const llmTestResult = ref<any>(null);
+const llmTestError = ref('');
 
 // Players
 const players = ref<Record<string, { name: string; role_id: string; role_name?: string }>>({});
@@ -141,16 +185,67 @@ async function loadGenres() {
   } catch { /* use defaults */ }
 }
 
+async function loadLLMConfig() {
+  try {
+    const res = await fetch('/api/llm-config');
+    if (res.ok) {
+      const data = await res.json();
+      llmEndpoint.value = data.endpoint || '';
+      llmModel.value = data.model || '';
+      // Don't restore api_key from masked value
+    }
+  } catch { /* use defaults */ }
+}
+
+async function saveLLMConfig() {
+  savingConfig.value = true;
+  configSaved.value = false;
+  try {
+    const res = await fetch('/api/llm-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: llmEndpoint.value || null,
+        model: llmModel.value || null,
+        api_key: llmApiKey.value || null,
+      }),
+    });
+    if (res.ok) {
+      configSaved.value = true;
+      setTimeout(() => { configSaved.value = false; }, 3000);
+    }
+  } catch (e) {
+    console.error('Save config failed:', e);
+  } finally {
+    savingConfig.value = false;
+  }
+}
+
 async function testLLM() {
   testingLLM.value = true;
   llmTestStatus.value = '';
+  llmTestError.value = '';
   try {
-    const res = await fetch('/api/test-llm', { method: 'POST' });
+    const res = await fetch('/api/test-llm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: llmEndpoint.value || null,
+        model: llmModel.value || null,
+        api_key: llmApiKey.value || null,
+      }),
+    });
     const data = await res.json();
     llmTestResult.value = data;
-    llmTestStatus.value = data.status === 'connected' ? 'connected' : 'error';
+    if (data.status === 'connected') {
+      llmTestStatus.value = 'connected';
+    } else {
+      llmTestStatus.value = 'error';
+      llmTestError.value = data.detail || '连接失败';
+    }
   } catch {
     llmTestStatus.value = 'error';
+    llmTestError.value = '网络错误';
   } finally {
     testingLLM.value = false;
   }
@@ -246,7 +341,7 @@ async function startGame() {
 }
 
 onMounted(async () => {
-  await loadGenres();
+  await Promise.all([loadGenres(), loadLLMConfig()]);
   fetchState();
   const interval = setInterval(fetchState, 3000);
   return () => clearInterval(interval);
@@ -271,13 +366,89 @@ h1 { text-align: center; color: #eee; }
 }
 .admin-section h2 { color: #e94560; font-size: 16px; margin-bottom: 12px; }
 
-.llm-test-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.test-btn {
-  padding: 8px 16px; border: none; border-radius: 6px;
-  background: #333; color: #eee; cursor: pointer; font-size: 13px;
+.llm-config-panel {
+  margin-bottom: 16px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  overflow: hidden;
 }
-.status-connected { color: #27ae60; }
-.status-error { color: #e94560; }
+.llm-config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  color: #ccc;
+  font-size: 14px;
+  user-select: none;
+}
+.llm-config-header:hover { background: rgba(0, 0, 0, 0.5); }
+.expand-icon { font-size: 12px; color: #888; }
+.llm-config-body { padding: 14px; }
+
+.config-field { margin-bottom: 10px; }
+.config-field label {
+  display: block;
+  font-size: 12px;
+  color: #aaa;
+  margin-bottom: 4px;
+}
+.config-field input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #eee;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.config-field input::placeholder { color: #555; }
+.key-input-row { display: flex; gap: 8px; }
+.key-input-row input { flex: 1; }
+.toggle-key-btn {
+  padding: 6px 10px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #aaa;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.config-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.save-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #2980b9;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+.save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.test-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #333;
+  color: #eee;
+  cursor: pointer;
+  font-size: 13px;
+}
+.test-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.status-connected { color: #27ae60; font-size: 13px; }
+.status-error { color: #e94560; font-size: 13px; }
+.error-msg { color: #e94560; font-size: 12px; }
+.success-msg { color: #27ae60; font-size: 12px; margin-top: 8px; }
 
 .genre-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .genre-form label { font-size: 13px; color: #aaa; }
