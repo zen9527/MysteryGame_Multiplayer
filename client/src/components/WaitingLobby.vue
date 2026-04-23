@@ -78,7 +78,7 @@
     <!-- Share room link -->
     <div class="share-section">
       <p>分享房间号给好友：</p>
-      <input :value="gameId" readonly @click="$refs.roomInput?.select()" ref="roomInput" />
+      <input :value="gameId" readonly @click="selectRoomId" ref="roomInput" />
     </div>
   </div>
 </template>
@@ -120,6 +120,15 @@ const canStart = computed(
 
 // Game start
 const starting = ref(false);
+
+// Room ID input ref
+const roomInput = ref<HTMLInputElement | null>(null);
+
+function selectRoomId() {
+  if (roomInput.value) {
+    roomInput.value.select();
+  }
+}
 
 async function loadGenres() {
   try {

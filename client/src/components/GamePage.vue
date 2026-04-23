@@ -105,12 +105,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import GameTimer from './GameTimer.vue';
 import AdminPanel from './AdminPanel.vue';
 
 const route = useRoute();
-const router = useRouter();
 const gameId = route.params.gameId as string;
 const playerId = localStorage.getItem('player_id') || '';
 
