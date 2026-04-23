@@ -21,10 +21,15 @@ const rooms = ref<any[]>([]);
 const router = useRouter();
 
 async function createRoom() {
-  const res = await fetch('/api/rooms', { method: 'POST' });
+  const creatorId = `admin_${Date.now()}`;
+  localStorage.setItem('player_id', creatorId);
+  const res = await fetch('/api/rooms', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creator_id: creatorId }),
+  });
   const data = await res.json();
-  console.log('Created room:', data);
-  router.push(`/join/${data.game_id}`);
+  router.push(`/lobby/${data.game_id}`); // Go directly to lobby as admin
 }
 
 async function joinRoom(gameId: string) {
