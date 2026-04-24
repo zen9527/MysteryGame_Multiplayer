@@ -81,7 +81,7 @@ class LLMClient:
         resp = self._build_request([
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
-        ], temperature=0.7, timeout=180)
+        ], temperature=0.7, timeout=300)
         return resp["choices"][0]["message"]["content"]
 
     def host_event(self, system_prompt: str, message_history: list[str]) -> str:

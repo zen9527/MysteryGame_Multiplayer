@@ -246,10 +246,9 @@ async function saveLLMConfig() {
   configSaved.value = false;
   try {
     // Build config object — only include fields that have values
+    // Do NOT send model parameter - let backend use its default model from .env
     const saveConfig: any = {};
     if (llmEndpoint.value) saveConfig.endpoint = llmEndpoint.value;
-    if (effectiveModel()) saveConfig.model = effectiveModel();
-    // Only send api_key if user explicitly typed something
     if (llmApiKey.value.trim()) saveConfig.api_key = llmApiKey.value;
 
     const res = await fetch('/api/llm-config', {
