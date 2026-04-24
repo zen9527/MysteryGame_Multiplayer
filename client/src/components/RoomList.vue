@@ -22,13 +22,14 @@ const router = useRouter();
 
 async function createRoom() {
   const creatorId = `admin_${Date.now()}`;
-  localStorage.setItem('player_id', creatorId);
   const res = await fetch('/api/rooms', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ creator_id: creatorId }),
   });
   const data = await res.json();
+  // Store admin ID with room association
+  localStorage.setItem(`admin_${data.game_id}`, creatorId);
   router.push(`/lobby/${data.game_id}`); // Go directly to lobby as admin
 }
 

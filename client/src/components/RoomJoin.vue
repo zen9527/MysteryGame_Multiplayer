@@ -37,8 +37,8 @@ async function join() {
       throw new Error(data.detail || '加入失败');
     }
     const data = await res.json();
-    // Save player_id for later use
-    localStorage.setItem('player_id', data.player_id);
+    // Save player_id scoped to this room
+    localStorage.setItem(`player_${gameId}`, data.player_id);
     // Navigate to lobby with player info
     router.push(`/lobby/${gameId}?player_id=${data.player_id}&role_id=${data.role_id}`);
   } catch (e: any) {

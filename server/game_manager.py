@@ -38,9 +38,16 @@ class GameManager:
         if game_id not in self.games:
             return None
         state = self.games[game_id]
-        if len(state.players) >= len(state.script.roles):
+        # DM (room creator) does not get a role — they are the host
+        if player_id == state.room_creator_id:
+            player = Player(id=player_id, name=player_name, role_id="", role=None)
+            state.players[player_id] = player
+            return player
+        # Count playable players (exclude DM) to assign roles correctly
+        playable_count = sum(1 for pid, p in state.players.items() if pid != state.room_creator_id)
+        if playable_count >= len(state.script.roles):
             return None  # 房间已满
-        role = state.script.roles[len(state.players)] if state.script.roles else None
+        role = state.script.roles[playable_count] if state.script.roles else None
         player = Player(
             id=player_id,
             name=player_name,
@@ -55,21 +62,28 @@ class GameManager:
         if game_id in self.games:
             state = self.games[game_id]
             state.script = script
-            # 重新分配角色给已加入的玩家
+            # Reassign roles to playable players (skip DM)
             role_idx = 0
             for pid, player in state.players.items():
+                if pid == state.room_creator_id:
+                    player.role_id = ""
+                    player.role = None
+                    continue
                 if role_idx < len(script.roles):
                     new_role = script.roles[role_idx]
-                    state.players[pid].role_id = new_role.id
-                    state.players[pid].role = new_role
+                    player.role_id = new_role.id
+                    player.role = new_role
                     role_idx += 1
 
     def start_game(self, game_id: str):
         if game_id in self.games:
             state = self.games[game_id]
+            # Count playable players (exclude DM)
+            playable_count = sum(1 for pid in state.players if pid != state.room_creator_id)
             state.phase = "playing"
             state.act = 1
             state.timer_start = datetime.now()
+            return playable_count
 
     def is_admin(self, game_id: str, player_id: str) -> bool:
         """检查是否为管理员"""

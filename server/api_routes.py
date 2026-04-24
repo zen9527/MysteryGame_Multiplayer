@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from server.models import Script, Role, Clue, PlotOutline, Vote
+from server.models import Script, Role, Clue, PlotOutline, Vote, Accusation
 from server.game_manager import manager
 from server.host_dm import host as host_dm
 from server.middleware import require_admin
@@ -42,6 +42,12 @@ class ScriptGenerationRequest(BaseModel):
 
 class SetScriptRequest(BaseModel):
     script: Script
+
+
+class AccusationRequest(BaseModel):
+    from_player_id: str
+    target_role_name: str
+    reasoning: str
 
 
 class VoteRequest(BaseModel):
@@ -92,7 +98,7 @@ async def list_rooms():
     return [
         {
             "game_id": gid,
-            "player_count": len(state.players),
+            "player_count": sum(1 for pid in state.players if pid != state.room_creator_id),
             "phase": state.phase,
             "act": state.act,
             "script_generated": state.script_generated,
@@ -124,6 +130,11 @@ async def get_room(game_id: str):
         "script": {
             "title": state.script.title,
             "genre": state.script.genre,
+            "difficulty": state.script.difficulty,
+            "estimated_time": state.script.estimated_time,
+            "background_story": state.script.background_story,
+            "true_killer": state.script.true_killer,
+            "roles": [r.model_dump() for r in state.script.roles],
             "roles_count": len(state.script.roles),
         } if state.script_generated else None,
         "clues": [c.model_dump() for c in state.script.clues],
@@ -285,7 +296,8 @@ async def start_game(game_id: str):
     state = manager.get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
-    if len(state.players) < 2:
+    playable_count = sum(1 for pid in state.players if pid != state.room_creator_id)
+    if playable_count < 2:
         raise HTTPException(status_code=400, detail="至少需要2名玩家才能开始")
     if not state.script_generated:
         raise HTTPException(status_code=400, detail="先生成剧本再开始游戏")
@@ -378,6 +390,22 @@ async def get_dm_log(game_id: str):
     return {"dm_log": state.dm_log}
 
 
+# --- Accusation endpoints ---
+
+@router.post("/api/rooms/{game_id}/accusations")
+async def add_accusation(game_id: str, req: AccusationRequest):
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    accusation = Accusation(
+        from_player_id=req.from_player_id,
+        target_role_name=req.target_role_name,
+        reasoning=req.reasoning,
+    )
+    manager.add_accusation(game_id, accusation)
+    return {"status": "accusation recorded"}
+
+
 # --- Voting endpoints ---
 
 @router.post("/api/rooms/{game_id}/votes")
@@ -447,15 +475,17 @@ async def test_llm(req: Optional[LLMConfigRequest] = None):
     orig_endpoint = host_dm.llm.endpoint
     orig_model = host_dm.llm.model
     orig_api_key = host_dm.llm.api_key
-    did_override = False
 
-    if req and (req.endpoint or req.model or req.api_key):
+    if req and (req.endpoint or req.model or req.api_key is not None):
+        # Only override fields that user explicitly provided
+        endpoint_to_use = _normalize_endpoint(req.endpoint) if req.endpoint else orig_endpoint
+        model_to_use = req.model if req.model else orig_model
+        api_key_to_use = req.api_key if req.api_key is not None else orig_api_key
         host_dm.llm.set_runtime_config(
-            endpoint=req.endpoint or orig_endpoint,
-            model=req.model or orig_model,
-            api_key=req.api_key or orig_api_key,
+            endpoint=endpoint_to_use,
+            model=model_to_use,
+            api_key=api_key_to_use,
         )
-        did_override = True
 
     try:
         import time
@@ -472,13 +502,32 @@ async def test_llm(req: Optional[LLMConfigRequest] = None):
     except Exception as e:
         return {"status": "error", "detail": str(e)}
     finally:
-        # Restore original config if we temporarily overrode it
-        if did_override:
-            host_dm.llm.set_runtime_config(
-                endpoint=orig_endpoint,
-                model=orig_model,
-                api_key=orig_api_key,
-            )
+        # Always restore original config after test
+        host_dm.llm.set_runtime_config(
+            endpoint=orig_endpoint,
+            model=orig_model,
+            api_key=orig_api_key,
+        )
+
+
+def _normalize_endpoint(url: Optional[str]) -> str:
+    """Ensure endpoint has http:// scheme and strip trailing slash."""
+    if not url:
+        return ""
+    url = url.strip().rstrip("/")
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = "http://" + url
+    return url
+
+
+@router.get("/api/llm-models")
+async def list_llm_models():
+    """获取 LLM 提供商可用的模型列表"""
+    try:
+        models = host_dm.llm.list_models()
+        return {"models": models}
+    except Exception as e:
+        return {"models": [], "error": str(e)}
 
 
 @router.get("/api/health")

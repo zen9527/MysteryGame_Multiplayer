@@ -5,7 +5,7 @@ from server.models import GameState
 class HostDM:
     def __init__(self):
         self.llm = LLMClient()
-        self.system_prompt = """你是一名剧本杀主持人（DM）。你的职责：
+        self.system_prompt = """你是一名专业的剧本杀主持人（DM）。你的职责：
 1. 动态发布事件 — 每轮给玩家一个情境或发现
 2. 投放线索 — 根据游戏进度和玩家行为决定何时放出什么线索
 3. 维持剧情一致性 — 所有事件和线索必须符合剧本设定
@@ -20,7 +20,7 @@ class HostDM:
 - 线索投放要有节奏感，不要一次性全部放出
 - 给不同角色投放个性化线索（利用 target_role）
 - 保持悬疑感和趣味性
-- 返回内容简洁明了，适合直接展示给玩家"""
+- 返回内容简洁明了，使用中文，适合直接展示给玩家"""
 
     def generate_event(self, game_state: GameState) -> str:
         """生成当前轮次的事件"""

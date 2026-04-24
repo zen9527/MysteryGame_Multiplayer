@@ -4,7 +4,7 @@
     <header class="game-header">
       <h1>{{ scriptTitle || '剧本杀' }}</h1>
       <span class="phase-badge">{{ phaseText }} (第{{ act }}幕)</span>
-      <GameTimer />
+      <GameTimer :total-seconds="timerSeconds" />
     </header>
 
     <!-- Main content -->
@@ -111,7 +111,7 @@ import AdminPanel from './AdminPanel.vue';
 
 const route = useRoute();
 const gameId = route.params.gameId as string;
-const playerId = localStorage.getItem('player_id') || '';
+const playerId = localStorage.getItem(`player_${gameId}`) || localStorage.getItem('player_id') || '';
 
 // State
 const phase = ref<'waiting' | 'playing' | 'trial' | 'revealed' | 'finished'>('playing');
@@ -123,6 +123,7 @@ const currentEvent = ref('');
 const newMessage = ref('');
 const isAdmin = ref(false);
 const dmLog = ref<string[]>([]);
+const timerSeconds = ref(3600); // default 60 minutes
 
 // Accusation state
 const showAccusation = ref(false);
@@ -160,6 +161,13 @@ async function fetchState() {
     players.value = data.players || {};
     isAdmin.value = data.room_creator_id === playerId;
 
+    // Update timer from game state (max_duration_minutes)
+    if (phase.value === 'playing') {
+      // We don't get timer directly from API, so estimate from script estimated_time
+      // For now use a default 90 minutes
+      timerSeconds.value = 90 * 60;
+    }
+
     // Update messages from server
     if (data.public_messages && data.public_messages.length > 0) {
       const existingCount = messages.value.length;
@@ -195,6 +203,10 @@ function connectWebSocket() {
       case 'chat':
         messages.value.push({ from: msg.from, content: msg.content });
         break;
+      case 'private_chat':
+        // Private chat — only show to sender and receiver
+        messages.value.push({ from: msg.from === playerId ? '我(私聊)' : '(私聊) ' + msg.from, content: msg.content });
+        break;
       case 'event':
         currentEvent.value = msg.content;
         messages.value.push({ from: '__dm__', content: msg.content });
@@ -202,8 +214,22 @@ function connectWebSocket() {
       case 'system':
         messages.value.push({ from: '系统', content: msg.content });
         break;
+      case 'clue_reveal':
+        const clueText = msg.public
+          ? `🔍 新线索（公开）：${msg.clue.title} — ${msg.clue.content}`
+          : `🔍 你的私人线索：${msg.clue.title} — ${msg.clue.content}`;
+        currentEvent.value = clueText;
+        messages.value.push({ from: '__dm__', content: clueText });
+        break;
       case 'accusation':
         messages.value.push({ from: msg.from, content: `指控 ${msg.target}: ${msg.reasoning}` });
+        break;
+      case 'vote_result':
+        const voteSummary = `🗳️ 投票结果（第${msg.round}轮）: ${Object.entries(msg.results).map(([name, count]) => `${name}: ${count}票`).join(', ')}`;
+        messages.value.push({ from: '系统', content: voteSummary });
+        if (msg.consensus) {
+          messages.value.push({ from: '系统', content: '✅ 达成共识！进入真相揭晓环节' });
+        }
         break;
       case 'trial_start':
         phase.value = 'trial';
@@ -215,6 +241,17 @@ function connectWebSocket() {
         break;
       case 'game_over':
         phase.value = 'finished';
+        const resultText = msg.result === 'correct' ? '真相正确！' : msg.result === 'wrong' ? '真相错误！' : '时间耗尽！';
+        messages.value.push({ from: '系统', content: `游戏结束：${resultText}` });
+        break;
+      case 'player_joined':
+        messages.value.push({ from: '系统', content: `${msg.player_name} 加入了游戏` });
+        break;
+      case 'player_left':
+        messages.value.push({ from: '系统', content: `${msg.player_name} 离开了游戏` });
+        break;
+      case 'role_assigned':
+        messages.value.push({ from: '系统', content: `你的角色：${(msg.role as any)?.name || '未知'}` });
         break;
     }
     nextTick(() => {
@@ -254,14 +291,8 @@ async function sendMessage() {
 }
 
 async function requestClue() {
-  sendWSMessage('chat', { content: '[请求线索]' });
-  try {
-    await fetch(`/api/rooms/${gameId}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player_id: playerId, message: '[请求线索]', is_private: false }),
-    });
-  } catch (e) { console.error(e); }
+  // Send WS request_advance to trigger LLM event generation
+  sendWSMessage('request_advance');
 }
 
 function startAccusation() { showAccusation.value = true; }
@@ -270,7 +301,7 @@ async function submitAccusation() {
   if (!targetRole.value || !reasoning.value) return;
   sendWSMessage('accuse', { target_role_name: targetRole.value, reasoning: reasoning.value });
   try {
-    await fetch(`/api/rooms/${gameId}/votes`, {
+    await fetch(`/api/rooms/${gameId}/accusations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ from_player_id: playerId, target_role_name: targetRole.value, reasoning: reasoning.value }),

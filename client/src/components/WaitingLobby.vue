@@ -16,15 +16,30 @@
         <div v-if="llmConfigExpanded" class="llm-config-body">
           <div class="config-field">
             <label>API 端点</label>
-            <input v-model="llmEndpoint" placeholder="http://127.0.0.1:12340" />
+            <input v-model="llmEndpoint" placeholder="192.168.1.107:12340（自动添加 http://）" />
+            <p v-if="llmEndpoint && !llmEndpoint.startsWith('http')" class="endpoint-hint">
+              将自动补全为：{{ normalizeEndpoint(llmEndpoint) }}
+            </p>
           </div>
           <div class="config-field">
             <label>模型名称</label>
-            <input v-model="llmModel" placeholder="qwen3.5-122b-a10b" />
+            <div class="model-select-row">
+              <select v-model="llmModel" :disabled="!modelList.length">
+                <option value="">-- 选择模型 --</option>
+                <option v-for="m in modelList" :key="m" :value="m">{{ m }}</option>
+              </select>
+              <button class="fetch-models-btn" @click="fetchModels" :disabled="fetchingModels" type="button">
+                {{ fetchingModels ? '加载中...' : '🔍 获取模型' }}
+              </button>
+            </div>
+            <input v-model="llmModelManual" placeholder="或手动输入模型名称" class="manual-input" />
           </div>
           <div class="config-field">
             <label>API Key</label>
-            <div class="key-input-row">
+            <div v-if="apiKeyPreFilled" class="key-prefilled-info">
+              服务器已配置：{{ apiKeyMasked }}（无需修改）
+            </div>
+            <div v-else class="key-input-row">
               <input
                 v-model="llmApiKey"
                 :type="showApiKey ? 'text' : 'password'"
@@ -125,7 +140,7 @@ import ScriptEditor from './ScriptEditor.vue';
 const router = useRouter();
 const route = useRoute();
 const gameId = route.params.gameId as string;
-const adminId = localStorage.getItem('player_id') || '';
+const adminId = localStorage.getItem(`admin_${gameId}`) || '';
 
 // Admin state
 const isAdmin = ref(false);
@@ -144,10 +159,23 @@ const genError = ref('');
 const llmConfigExpanded = ref(false);
 const llmEndpoint = ref('');
 const llmModel = ref('');
+const llmModelManual = ref('');
 const llmApiKey = ref('');
 const showApiKey = ref(false);
 const savingConfig = ref(false);
 const configSaved = ref(false);
+const modelList = ref<string[]>([]);
+const fetchingModels = ref(false);
+const apiKeyPreFilled = ref(false);
+const apiKeyMasked = ref('');
+
+function normalizeEndpoint(url: string): string {
+  url = url.trim().replace(/\/+$/, '');
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return 'http://' + url;
+  }
+  return url;
+}
 
 // LLM test
 const testingLLM = ref(false);
@@ -192,9 +220,34 @@ async function loadLLMConfig() {
       const data = await res.json();
       llmEndpoint.value = data.endpoint || '';
       llmModel.value = data.model || '';
-      // Don't restore api_key from masked value
+      // Check if API key is pre-filled on server
+      apiKeyPreFilled.value = !!data.api_key_set;
+      apiKeyMasked.value = data.api_key_masked || '';
     }
   } catch { /* use defaults */ }
+}
+
+function effectiveModel() {
+  return llmModelManual.value.trim() || llmModel.value;
+}
+
+async function fetchModels() {
+  fetchingModels.value = true;
+  modelList.value = [];
+  try {
+    const res = await fetch('/api/llm-models');
+    if (res.ok) {
+      const data = await res.json();
+      modelList.value = data.models || [];
+      if (modelList.value.length && !llmModel.value) {
+        llmModel.value = modelList.value[0];
+      }
+    }
+  } catch (e) {
+    console.error('Fetch models failed:', e);
+  } finally {
+    fetchingModels.value = false;
+  }
 }
 
 async function saveLLMConfig() {
@@ -206,13 +259,16 @@ async function saveLLMConfig() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         endpoint: llmEndpoint.value || null,
-        model: llmModel.value || null,
-        api_key: llmApiKey.value || null,
+        model: effectiveModel() || null,
+        // Always send the api_key from input if user typed something
+        api_key: llmApiKey.value.trim() ? llmApiKey.value : (apiKeyPreFilled.value ? null : undefined),
       }),
     });
     if (res.ok) {
       configSaved.value = true;
       setTimeout(() => { configSaved.value = false; }, 3000);
+      // Reload config to update pre-filled status
+      await loadLLMConfig();
     }
   } catch (e) {
     console.error('Save config failed:', e);
@@ -225,17 +281,30 @@ async function testLLM() {
   testingLLM.value = true;
   llmTestStatus.value = '';
   llmTestError.value = '';
+  llmTestResult.value = null;
+  const startTime = Date.now();
+  const timer = setInterval(() => {
+    llmTestResult.value = { response_time_ms: Date.now() - startTime };
+  }, 200);
   try {
+    // Build config object — only include fields that have values
+    const testConfig: any = {};
+    if (llmEndpoint.value.trim()) testConfig.endpoint = llmEndpoint.value;
+    if (effectiveModel()) testConfig.model = effectiveModel();
+    // Include api_key if user typed something OR if server has pre-filled key
+    if (llmApiKey.value.trim()) {
+      testConfig.api_key = llmApiKey.value;
+    } else if (apiKeyPreFilled.value) {
+      testConfig.api_key = ''; // Empty string tells server to use pre-filled key
+    }
+    
     const res = await fetch('/api/test-llm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        endpoint: llmEndpoint.value || null,
-        model: llmModel.value || null,
-        api_key: llmApiKey.value || null,
-      }),
+      body: JSON.stringify(testConfig),
     });
     const data = await res.json();
+    clearInterval(timer);
     llmTestResult.value = data;
     if (data.status === 'connected') {
       llmTestStatus.value = 'connected';
@@ -244,6 +313,7 @@ async function testLLM() {
       llmTestError.value = data.detail || '连接失败';
     }
   } catch {
+    clearInterval(timer);
     llmTestStatus.value = 'error';
     llmTestError.value = '网络错误';
   } finally {
@@ -293,14 +363,16 @@ async function fetchState() {
     isAdmin.value = data.room_creator_id === adminId;
 
     // If script is generated, show it
-    if (data.script_generated && !generatedScript.value) {
-      // Fetch full script details — for now we know it's generated
+    if (data.script_generated) {
       generatedScript.value = {
         title: data.script?.title || '已生成',
         genre: data.script?.genre || '',
-        roles_count: data.script?.roles_count || 0,
-        roles: [], // Full role details would need a separate endpoint
+        difficulty: data.script?.difficulty || '中等',
+        estimated_time: data.script?.estimated_time || 90,
+        backgroundStory: data.script?.background_story || '',
+        roles: data.script?.roles || [],
         clues: data.clues || [],
+        plot_outline: data.script?.plot_outline || { act1: '', act2: '', act3: '' },
       };
     }
 
@@ -405,7 +477,58 @@ h1 { text-align: center; color: #eee; }
   box-sizing: border-box;
 }
 .config-field input::placeholder { color: #555; }
+.model-select-row { display: flex; gap: 8px; }
+.model-select-row select {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #eee;
+  font-size: 13px;
+}
+.model-select-row select:disabled { opacity: 0.5; }
+.fetch-models-btn {
+  padding: 6px 12px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #aaa;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.fetch-models-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.manual-input {
+  margin-top: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #ccc;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.manual-input::placeholder { color: #444; }
+.key-prefilled-info {
+  padding: 8px 10px;
+  background: rgba(41, 128, 185, 0.1);
+  border: 1px solid rgba(41, 128, 185, 0.3);
+  border-radius: 6px;
+  color: #3498db;
+  font-size: 13px;
+}
 .key-input-row { display: flex; gap: 8px; }
+.endpoint-hint {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(241, 196, 15, 0.1);
+  border: 1px solid rgba(241, 196, 15, 0.3);
+  border-radius: 6px;
+  color: #f1c40f;
+  font-size: 12px;
+}
 .key-input-row input { flex: 1; }
 .toggle-key-btn {
   padding: 6px 10px;
