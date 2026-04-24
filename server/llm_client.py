@@ -5,12 +5,26 @@ from server.config import config
 
 
 def _normalize_endpoint(url: str) -> str:
-    """Ensure endpoint has http:// scheme and strip trailing slash."""
+    """Ensure endpoint has http:// scheme and strip trailing slash.
+
+    For OpenAI-compatible APIs, the endpoint is typically like:
+    - http://localhost:1234/v1  (standard OpenAI format)
+    - http://localhost:1234/api  (LM Studio format)
+
+    We store the base path without /v1 or /api suffix, and append it in _chat_url.
+    """
     url = url.strip().rstrip("/")
     if not url:
         return url
     if not url.startswith("http://") and not url.startswith("https://"):
         url = "http://" + url
+
+    # Remove /v1 or /api suffix if present, store as base path
+    for suffix in ["/v1", "/api"]:
+        if url.endswith(suffix):
+            url = url[:-len(suffix)]
+            break
+
     return url
 
 
@@ -51,18 +65,14 @@ class LLMClient:
         }
 
     def _chat_url(self) -> str:
-        """Normalize endpoint to avoid double /v1 prefix."""
-        base = self.endpoint.rstrip("/")
-        if base.endswith("/v1"):
-            return f"{base}/chat/completions"
-        return f"{base}/v1/chat/completions"
+        """Append correct API path to base endpoint."""
+        # LM Studio uses /api/chat/completions, standard OpenAI uses /v1/chat/completions
+        # We use /api for LM Studio compatibility (it's more common for local LLM servers)
+        return f"{self.endpoint}/api/chat/completions"
 
     def _models_url(self) -> str:
-        """Normalize endpoint for models listing."""
-        base = self.endpoint.rstrip("/")
-        if base.endswith("/v1"):
-            return f"{base}/models"
-        return f"{base}/v1/models"
+        """Append correct API path to base endpoint."""
+        return f"{self.endpoint}/api/models"
 
     def _build_request(self, messages: list, temperature: float = 0.7, timeout: int = 120) -> dict:
         """Build and send an OpenAI-compatible chat request. Returns parsed response dict."""

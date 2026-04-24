@@ -36,10 +36,7 @@
           </div>
           <div class="config-field">
             <label>API Key</label>
-            <div v-if="apiKeyPreFilled" class="key-prefilled-info">
-              服务器已配置：{{ apiKeyMasked }}（无需修改）
-            </div>
-            <div v-else class="key-input-row">
+            <div class="key-input-row">
               <input
                 v-model="llmApiKey"
                 :type="showApiKey ? 'text' : 'password'"
@@ -166,8 +163,6 @@ const savingConfig = ref(false);
 const configSaved = ref(false);
 const modelList = ref<string[]>([]);
 const fetchingModels = ref(false);
-const apiKeyPreFilled = ref(false);
-const apiKeyMasked = ref('');
 
 function normalizeEndpoint(url: string): string {
   url = url.trim().replace(/\/+$/, '');
@@ -220,9 +215,7 @@ async function loadLLMConfig() {
       const data = await res.json();
       llmEndpoint.value = data.endpoint || '';
       llmModel.value = data.model || '';
-      // Check if API key is pre-filled on server
-      apiKeyPreFilled.value = !!data.api_key_set;
-      apiKeyMasked.value = data.api_key_masked || '';
+      // API key is now always editable, no need to check pre-filled status
     }
   } catch { /* use defaults */ }
 }
@@ -239,9 +232,7 @@ async function fetchModels() {
     if (res.ok) {
       const data = await res.json();
       modelList.value = data.models || [];
-      if (modelList.value.length && !llmModel.value) {
-        llmModel.value = modelList.value[0];
-      }
+      // Do not auto-select first model - let admin manually select from dropdown
     }
   } catch (e) {
     console.error('Fetch models failed:', e);
