@@ -254,15 +254,17 @@ async function saveLLMConfig() {
   savingConfig.value = true;
   configSaved.value = false;
   try {
+    // Build config object — only include fields that have values
+    const saveConfig: any = {};
+    if (llmEndpoint.value) saveConfig.endpoint = llmEndpoint.value;
+    if (effectiveModel()) saveConfig.model = effectiveModel();
+    // Only send api_key if user explicitly typed something
+    if (llmApiKey.value.trim()) saveConfig.api_key = llmApiKey.value;
+
     const res = await fetch('/api/llm-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        endpoint: llmEndpoint.value || null,
-        model: effectiveModel() || null,
-        // Always send the api_key from input if user typed something
-        api_key: llmApiKey.value.trim() ? llmApiKey.value : (apiKeyPreFilled.value ? null : undefined),
-      }),
+      body: JSON.stringify(saveConfig),
     });
     if (res.ok) {
       configSaved.value = true;
@@ -291,11 +293,10 @@ async function testLLM() {
     const testConfig: any = {};
     if (llmEndpoint.value.trim()) testConfig.endpoint = llmEndpoint.value;
     if (effectiveModel()) testConfig.model = effectiveModel();
-    // Include api_key if user typed something OR if server has pre-filled key
+    // Include api_key only if user explicitly typed something
+    // Don't send anything if server has pre-filled key (let it use default)
     if (llmApiKey.value.trim()) {
       testConfig.api_key = llmApiKey.value;
-    } else if (apiKeyPreFilled.value) {
-      testConfig.api_key = ''; // Empty string tells server to use pre-filled key
     }
     
     const res = await fetch('/api/test-llm', {

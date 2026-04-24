@@ -27,7 +27,7 @@ class LLMClient:
         api_key: Optional[str] = None,
     ) -> None:
         """Runtime override of LLM config (per-session, not persisted to .env).
-        
+
         Note: Passing empty string "" for api_key will clear the key.
         Passing null/None means "don't change this field".
         """
