@@ -42,11 +42,11 @@ if not exist "client\node_modules" (
 
 :: Check .env file
 echo [3/4] Checking configuration...
-if not exist "server\.env" (
+if not exist ".env" (
     if exist "server\.env.example" (
         echo Creating .env from template...
-        copy server\.env.example server\.env
-        echo Please edit server\.env to configure LLM server address
+        copy server\.env.example .env
+        echo Please edit .env to configure LLM server address
     ) else (
         echo [WARNING] No .env file found
     )
