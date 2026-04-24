@@ -9,7 +9,7 @@
 - **6 种剧本类型** — 悬疑推理 / 古风权谋 / 现代都市 / 恐怖惊悚 / 欢乐搞笑 / 科幻未来
 - **完整游戏流程** — 选本 → 生成剧本 → 阅读角色卡 → 自我介绍 → 搜证 → 讨论 → 投票 → 审判 → 揭晓 → 复盘
 - **公聊 + 私聊** — 全局讨论与玩家间一对一私聊
-- **审判系统** —  accusation + 多轮投票 + 真相揭晓
+- **审判系统** — accusation + 多轮投票 + 真相揭晓
 
 ## 🚀 快速开始
 
@@ -26,10 +26,10 @@ npm install
 
 ### 2. 配置 LLM 服务器
 
-复制 `.env.example` 为 `.env` 并编辑：
+编辑 `.env` 文件（如不存在则创建）：
 
 ```ini
-LLM_SERVER_URL=http://192.168.1.107:12340
+LLM_ENDPOINT=http://192.168.1.107:12340
 LLM_API_KEY=your_api_key_here
 LLM_MODEL=qwen3.5-122b-a10b
 ```
@@ -37,15 +37,19 @@ LLM_MODEL=qwen3.5-122b-a10b
 ### 3. 启动
 
 ```bash
-# 后端（Terminal 1）
+# 使用启动脚本
+start.bat
+
+# 或手动启动
+# 后端
 uvicorn server.main:app --host 0.0.0.0 --port 8000
 
-# 前端（Terminal 2）
+# 前端
 cd client
 npm run dev
 ```
 
-打开浏览器访问 `http://localhost:5173`。
+打开浏览器访问 `http://localhost:3000`。
 
 ## 📁 项目结构
 
@@ -54,7 +58,7 @@ npm run dev
 ├── server/                    # FastAPI 后端
 │   ├── main.py                # 应用入口
 │   ├── config.py              # 配置管理
-│   ├── llm_client.py          # LLM API 客户端（SSE 流式）
+│   ├── llm_client.py          # LLM API 客户端
 │   ├── models.py              # Pydantic 数据模型
 │   ├── game_manager.py        # 游戏状态管理
 │   ├── host_dm.py             # LLM 主持人逻辑
@@ -69,7 +73,7 @@ npm run dev
 │   │   ├── stores/game.ts     # Pinia 状态管理
 │   │   ├── types/ws.ts        # WebSocket 类型定义
 │   │   ├── utils/ws.ts        # WebSocket 连接管理
-│   │   └── components/        # 11 个 UI 组件
+│   │   └── components/        # UI 组件
 │   └── tests/                 # 前端组件测试
 │
 ├── shared/                    # 共享类型/Schema
@@ -77,7 +81,6 @@ npm run dev
 │   └── schemas.ts             # 前端 Zod 校验
 │
 ├── tests/                     # 后端单元测试 & 集成测试
-├── docs/                      # 设计与实施文档
 ├── requirements.txt           # Python 依赖
 └── .gitignore
 ```
