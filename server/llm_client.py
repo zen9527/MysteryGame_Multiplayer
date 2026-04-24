@@ -5,26 +5,12 @@ from server.config import config
 
 
 def _normalize_endpoint(url: str) -> str:
-    """Ensure endpoint has http:// scheme and strip trailing slash.
-
-    For OpenAI-compatible APIs, the endpoint is typically like:
-    - http://localhost:1234/v1  (standard OpenAI format)
-    - http://localhost:1234/api  (LM Studio format)
-
-    We store the base path without /v1 or /api suffix, and append it in _chat_url.
-    """
+    """Ensure endpoint has http:// scheme and strip trailing slash."""
     url = url.strip().rstrip("/")
     if not url:
         return url
     if not url.startswith("http://") and not url.startswith("https://"):
         url = "http://" + url
-
-    # Remove /v1 or /api suffix if present, store as base path
-    for suffix in ["/v1", "/api"]:
-        if url.endswith(suffix):
-            url = url[:-len(suffix)]
-            break
-
     return url
 
 
@@ -42,20 +28,18 @@ class LLMClient:
     ) -> None:
         """Runtime override of LLM config (per-session, not persisted to .env).
 
-        Note: Passing empty string "" for api_key will clear the key.
+        Passing empty string "" for api_key will clear the key.
         Passing null/None means "don't change this field".
         """
         if endpoint is not None:
             self.endpoint = _normalize_endpoint(endpoint)
         if model is not None:
             self.model = model
-        # Empty string clears the key, None leaves it unchanged
         if api_key is not None:
             self.api_key = api_key.strip()
 
     def get_config(self) -> dict:
         """Return current config with masked api_key."""
-        # Treat empty string as "not set"
         has_key = bool(self.api_key and self.api_key.strip())
         return {
             "endpoint": self.endpoint,
@@ -65,14 +49,12 @@ class LLMClient:
         }
 
     def _chat_url(self) -> str:
-        """Append correct API path to base endpoint."""
-        # LM Studio uses /api/chat/completions, standard OpenAI uses /v1/chat/completions
-        # We use /api for LM Studio compatibility (it's more common for local LLM servers)
-        return f"{self.endpoint}/api/chat/completions"
+        """Standard OpenAI-compatible chat endpoint."""
+        return f"{self.endpoint}/v1/chat/completions"
 
     def _models_url(self) -> str:
-        """Append correct API path to base endpoint."""
-        return f"{self.endpoint}/api/models"
+        """Standard OpenAI-compatible models endpoint."""
+        return f"{self.endpoint}/v1/models"
 
     def _build_request(self, messages: list, temperature: float = 0.7, timeout: int = 120) -> dict:
         """Build and send an OpenAI-compatible chat request. Returns parsed response dict."""
@@ -89,7 +71,6 @@ class LLMClient:
         response = requests.post(url, headers=headers, json=payload, timeout=timeout)
         response.raise_for_status()
         data = response.json()
-        # Defensive: ensure choices exist
         if not data.get("choices"):
             raw = json.dumps(data, ensure_ascii=False)[:500]
             raise ValueError(f"Unexpected response format (missing 'choices'): {raw}")
@@ -128,6 +109,5 @@ class LLMClient:
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         data = response.json()
-        # OpenAI-compatible format: {"data": [{"id": "model-name", ...}]}
         models = data.get("data", [])
         return [m.get("id", "") for m in models if isinstance(m, dict)]
