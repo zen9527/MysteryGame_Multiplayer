@@ -88,15 +88,15 @@ class LLMClient:
         """LLM 主持人发布事件"""
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend([{"role": "assistant", "content": msg} for msg in message_history])
-        resp = self._build_request(messages, temperature=0.8, timeout=60)
+        resp = self._build_request(messages, temperature=0.8, timeout=120)
         return resp["choices"][0]["message"]["content"]
 
     def test_connection(self) -> str:
         """Quick connection test, returns short response text."""
         resp = self._build_request([
-            {"role": "system", "content": "你是一个助手。"},
-            {"role": "user", "content": "请用一句话回复'连接正常'"},
-        ], temperature=0.1, timeout=15)
+            {"role": "system", "content": "You are an assistant."},
+            {"role": "user", "content": "Reply with 'Connection OK'"},
+        ], temperature=0.1, timeout=60)
         return resp["choices"][0]["message"]["content"]
 
     def list_models(self) -> list[str]:
@@ -106,7 +106,7 @@ class LLMClient:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
         }
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()
         models = data.get("data", [])
