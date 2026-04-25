@@ -84,6 +84,39 @@ class LLMClient:
         ], temperature=0.7, timeout=300)
         return resp["choices"][0]["message"]["content"]
 
+    def generate_script_stream(self, system_prompt: str, user_prompt: str):
+        """生成剧本，流式返回内容 chunks。"""
+        url = self._chat_url()
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.7,
+            "stream": True,
+        }
+        response = requests.post(url, headers=headers, json=payload, timeout=300, stream=True)
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if line:
+                text = line.decode("utf-8")
+                if text.startswith("data: "):
+                    data_str = text[6:]
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(data_str)
+                        content = data.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                        if content:
+                            yield content
+                    except json.JSONDecodeError:
+                        pass
+
     def host_event(self, system_prompt: str, message_history: list[str]) -> str:
         """LLM 主持人发布事件"""
         messages = [{"role": "system", "content": system_prompt}]

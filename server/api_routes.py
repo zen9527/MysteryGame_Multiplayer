@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from server.models import Script, Role, Clue, PlotOutline, Vote, Accusation
@@ -267,6 +268,110 @@ JSON格式要求：
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"剧本生成失败: {str(e)}")
+
+
+def _generate_script_stream_generator(game_id: str, req: ScriptGenerationRequest):
+    """Generator for SSE streaming of script generation."""
+    state = manager.get_state(game_id)
+    if not state:
+        yield f"data: {{\"type\": \"error\", \"message\": \"Room not found\"}}\n\n"
+        return
+    if state.phase != "waiting":
+        yield f"data: {{\"type\": \"error\", \"message\": \"只能在等待阶段生成剧本\"}}\n\n"
+        return
+
+    # Build prompt
+    user_prompt = f"""请生成一个完整的剧本杀剧本，以JSON格式返回。
+
+类型：{req.genre}
+难度：{req.difficulty}
+预计时长：{req.estimated_time}分钟
+玩家数量：{req.player_count}人（需要{req.player_count}个角色）
+
+JSON格式要求：
+{{
+  "title": "剧本标题",
+  "genre": "{req.genre}",
+  "difficulty": "{req.difficulty}",
+  "estimated_time": {req.estimated_time},
+  "background_story": "背景故事（200-500字）",
+  "true_killer": "凶手角色名",
+  "murder_method": "作案手法描述",
+  "cover_up": "掩盖手段描述",
+  "roles": [
+    {{
+      "id": "role_1",
+      "name": "角色名",
+      "age": 年龄数字,
+      "occupation": "职业",
+      "description": "简短描述",
+      "background": "个人背景故事（100-200字）",
+      "secret_task": "秘密任务",
+      "alibi": "不在场证明",
+      "motive": "作案动机",
+      "relationships": []
+    }}
+  ],
+  "clues": [
+    {{
+      "id": "clue_1",
+      "title": "线索标题",
+      "content": "线索内容描述",
+      "target_role": null,
+      "is_red_herring": false,
+      "content_hint": "提示"
+    }}
+  ],
+  "plot_outline": {{
+    "act1": "第一幕概述（背景介绍）",
+    "act2": "第二幕概述（自由调查）",
+    "act3": "第三幕概述（审判揭晓）"
+  }}
+}}
+
+注意：
+- 确保有{req.player_count}个角色
+- 每个角色的id必须是唯一的（role_1, role_2...）
+- 线索数量至少5条
+- 凶手必须是其中一个角色"""
+
+    try:
+        # Send start event
+        yield f"data: {{\"type\": \"start\"}}\n\n"
+
+        # Stream chunks
+        full_text = ""
+        for chunk in host_dm.llm.generate_script_stream(
+            "你是一名剧本杀设计师，请生成完整的剧本。只返回JSON，不要其他内容。",
+            user_prompt,
+        ):
+            full_text += chunk
+            yield f"data: {{\"type\": \"chunk\", \"content\": {json.dumps(chunk, ensure_ascii=False)}}}\n\n"
+
+        # Parse JSON
+        raw_json = full_text
+        if "```json" in raw_json:
+            raw_json = raw_json.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw_json:
+            raw_json = raw_json.split("```")[1].split("```")[0].strip()
+
+        script_dict = json.loads(raw_json)
+        script = Script(**script_dict)
+        manager.set_script(game_id, script)
+        state.script_generated = True
+
+        yield f"data: {{\"type\": \"done\", \"title\": {json.dumps(script.title, ensure_ascii=False)}, \"roles_count\": {len(script.roles)}, \"clues_count\": {len(script.clues)}}}\n\n"
+    except Exception as e:
+        yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
+
+
+@router.post("/api/rooms/{game_id}/generate-script-stream")
+async def generate_script_stream(game_id: str, req: ScriptGenerationRequest):
+    """流式生成剧本，通过 SSE 实时返回进度。"""
+    return StreamingResponse(
+        _generate_script_stream_generator(game_id, req),
+        media_type="text/event-stream",
+    )
 
 
 @router.post("/api/rooms/{game_id}/set-script")

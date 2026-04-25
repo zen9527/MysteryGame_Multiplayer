@@ -81,6 +81,10 @@
         <button @click="generateScript" :disabled="generating || !isAdmin" class="generate-btn">
           {{ generating ? '🤖 生成中...' : '🎲 生成剧本' }}
         </button>
+        <div v-if="generating" class="gen-progress">
+          <div class="progress-bar" :style="{ width: genProgress + '%' }"></div>
+          <span class="progress-text">{{ genProgress }}%</span>
+        </div>
       </div>
 
       <!-- Script Preview/Editor -->
@@ -149,6 +153,7 @@ const estimatedTime = ref(90);
 
 // Script generation
 const generating = ref(false);
+const genProgress = ref(0);
 const generatedScript = ref<any | null>(null);
 const genError = ref('');
 
@@ -306,9 +311,10 @@ async function testLLM() {
 
 async function generateScript() {
   generating.value = true;
+  genProgress.value = 0;
   genError.value = '';
   try {
-    const res = await fetch(`/api/rooms/${gameId}/generate-script`, {
+    const res = await fetch(`/api/rooms/${gameId}/generate-script-stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -322,8 +328,43 @@ async function generateScript() {
       const data = await res.json();
       throw new Error(data.detail || '生成失败');
     }
-    // Fetch the generated script from room state
-    await fetchState();
+    // Read SSE stream
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let chunkCount = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            switch (data.type) {
+              case 'start':
+                chunkCount = 0;
+                break;
+              case 'chunk':
+                chunkCount++;
+                genProgress.value = Math.min(99, Math.floor(chunkCount / 10));
+                break;
+              case 'done':
+                genProgress.value = 100;
+                await fetchState();
+                break;
+              case 'error':
+                throw new Error(data.message);
+            }
+          } catch { /* skip malformed SSE */ }
+        }
+      }
+    }
   } catch (e: any) {
     genError.value = e.message;
   } finally {
@@ -568,6 +609,19 @@ h1 { text-align: center; color: #eee; }
   color: #fff; font-size: 15px; cursor: pointer; margin-top: 8px;
 }
 .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.gen-progress {
+  margin-top: 8px; height: 24px; position: relative;
+  background: rgba(255, 255, 255, 0.05); border-radius: 4px; overflow: hidden;
+}
+.progress-bar {
+  height: 100%; background: linear-gradient(90deg, #e94560, #0f3460);
+  transition: width 0.3s ease;
+}
+.progress-text {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  color: #fff; font-size: 12px; font-weight: bold;
+}
 
 .player-list-section { margin-bottom: 24px; }
 .player-list-section h2 { color: #aaa; font-size: 16px; margin-bottom: 12px; }
