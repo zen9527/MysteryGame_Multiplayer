@@ -245,11 +245,9 @@ async function saveLLMConfig() {
   savingConfig.value = true;
   configSaved.value = false;
   try {
-    // Build config object — only include fields that have values
-    // Do NOT send model parameter - let backend use its default model from .env
+    // Only send model parameter - other settings (endpoint, api_key) stay unchanged
     const saveConfig: any = {};
-    if (llmEndpoint.value) saveConfig.endpoint = llmEndpoint.value;
-    if (llmApiKey.value.trim()) saveConfig.api_key = llmApiKey.value;
+    if (effectiveModel()) saveConfig.model = effectiveModel();
 
     const res = await fetch('/api/llm-config', {
       method: 'POST',
@@ -279,15 +277,9 @@ async function testLLM() {
     llmTestResult.value = { response_time_ms: Date.now() - startTime };
   }, 200);
   try {
-    // Build config object — only include fields that have values
+    // Only send model parameter for testing - other settings stay unchanged
     const testConfig: any = {};
-    if (llmEndpoint.value.trim()) testConfig.endpoint = llmEndpoint.value;
     if (effectiveModel()) testConfig.model = effectiveModel();
-    // Include api_key only if user explicitly typed something
-    // Don't send anything if server has pre-filled key (let it use default)
-    if (llmApiKey.value.trim()) {
-      testConfig.api_key = llmApiKey.value;
-    }
     
     const res = await fetch('/api/test-llm', {
       method: 'POST',
