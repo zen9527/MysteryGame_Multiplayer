@@ -361,7 +361,7 @@ async def start_game(game_id: str):
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
     playable_count = len(state.players)
-    if playable_count < 1:
+    if playable_count < 2:
         raise HTTPException(status_code=400, detail="至少需要2名玩家才能开始")
     if not state.script_generated:
         raise HTTPException(status_code=400, detail="先生成剧本再开始游戏")
