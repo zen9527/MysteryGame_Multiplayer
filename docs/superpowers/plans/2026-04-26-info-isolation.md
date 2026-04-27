@@ -1997,13 +1997,14 @@ async def start_game(game_id: str):
                 "data": card_data,
             })
 
-        # Distribute clues
-        for pid, clue_data in unlock_result["clues"].items():
-            await hub.send_to_player(game_id, pid, {
-                "type": "clue_unlock",
-                "player_id": pid,
-                "clue": clue_data,
-            })
+        # Distribute clues (list per player — one message per clue)
+        for pid, clue_list in unlock_result["clues"].items():
+            for clue_data in clue_list:
+                await hub.send_to_player(game_id, pid, {
+                    "type": "clue_unlock",
+                    "player_id": pid,
+                    "clue": clue_data,
+                })
 
         # Send DM private messages
         for pid, content in unlock_result["private_events"]:

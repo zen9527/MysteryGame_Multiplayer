@@ -247,7 +247,7 @@ class GameManager:
 
     def unlock_phase(self, game_id: str, new_phase: str, new_act: int):
         """阶段解锁：切换阶段并执行该阶段的所有自动分发。
-        返回 {role_cards: {pid: layer_data}, clues: {pid: clue_data}, private_events: [(pid, content)]}
+        返回 {role_cards: {pid: layer_data}, clues: {pid: [clue_data, ...]}, private_events: [(pid, content)]}
         """
         if game_id not in self.games:
             return None
@@ -273,11 +273,13 @@ class GameManager:
 
         for clue in state.script.clues:
             if clue.unlock_phase == new_phase:
-                for pid in clue.target_player_ids:
+                # Determine targets: if empty, distribute to all players (public clue)
+                targets = clue.target_player_ids if clue.target_player_ids else list(state.players.keys())
+                for pid in targets:
                     if pid in state.players:
                         clue_data = self.distribute_clue(game_id, clue.id, pid)
                         if clue_data:
-                            clues[pid] = clue_data
+                            clues.setdefault(pid, []).append(clue_data)
 
         private_events = self.execute_private_events(game_id, new_phase)
 
