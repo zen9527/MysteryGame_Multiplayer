@@ -211,15 +211,18 @@ class GameManager:
         return card_data
 
     def distribute_clue(self, game_id: str, clue_id: str, player_id: str):
-        """分发线索给特定玩家。返回线索数据或 None。"""
+        """分发线索给特定玩家。target_player_ids 使用角色名匹配。返回线索数据或 None。"""
         if game_id not in self.games:
             return None
         state = self.games[game_id]
         clue = next((c for c in state.script.clues if c.id == clue_id), None)
         if not clue:
             return None
-        if clue.target_player_ids and player_id not in clue.target_player_ids:
-            return None
+        # Match by role name (LLM outputs role names, not UUIDs)
+        player = state.players.get(player_id)
+        if player and player.role:
+            if clue.target_player_ids and player.role.name not in clue.target_player_ids:
+                return None
         return {
             "id": clue.id,
             "title": clue.title,
@@ -274,9 +277,16 @@ class GameManager:
         for clue in state.script.clues:
             if clue.unlock_phase == new_phase:
                 # Determine targets: if empty, distribute to all players (public clue)
-                targets = clue.target_player_ids if clue.target_player_ids else list(state.players.keys())
-                for pid in targets:
-                    if pid in state.players:
+                if clue.target_player_ids:
+                    # Iterate over players, match by role name
+                    for pid, player in state.players.items():
+                        if player.role and player.role.name in clue.target_player_ids:
+                            clue_data = self.distribute_clue(game_id, clue.id, pid)
+                            if clue_data:
+                                clues.setdefault(pid, []).append(clue_data)
+                else:
+                    # Public clue — distribute to all players
+                    for pid, player in state.players.items():
                         clue_data = self.distribute_clue(game_id, clue.id, pid)
                         if clue_data:
                             clues.setdefault(pid, []).append(clue_data)
