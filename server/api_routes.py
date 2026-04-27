@@ -107,6 +107,12 @@ class AddClueRequest(BaseModel):
     clue_content: str
 
 
+class DMPrivateRequest(BaseModel):
+    player_id: str  # 管理员ID
+    to_player_id: str  # 目标玩家ID
+    content: str
+
+
 class LLMConfigRequest(BaseModel):
     endpoint: Optional[str] = None
     model: Optional[str] = None
@@ -154,7 +160,6 @@ async def get_room(game_id: str):
             pid: {
                 "name": p.name,
                 "role_id": p.role_id,
-                "role_name": p.role.name if p.role else "",
             }
             for pid, p in state.players.items()
         },
@@ -408,6 +413,19 @@ async def add_clue(game_id: str, req: AddClueRequest):
     # Also push as event message
     manager.push_event(game_id, f"🔍 新线索发现：{req.clue_title} — {req.clue_content}")
     return {"status": "clue_added"}
+
+
+@router.post("/api/rooms/{game_id}/dm/private")
+async def dm_private(game_id: str, req: DMPrivateRequest):
+    """DM 向特定玩家发送私信（仅管理员）"""
+    from server.websocket_hub import hub
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+
+    await hub.send_dm_private(game_id, req.to_player_id, req.content)
+    return {"status": "dm_private_sent"}
 
 
 @router.post("/api/rooms/{game_id}/force-trial")
