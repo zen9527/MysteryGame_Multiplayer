@@ -27,7 +27,7 @@ export const useGameStore = defineStore('game', () => {
   const phase = ref<ValidPhase>('waiting');
   const act = ref(1);
   const messages = ref<WSMessage[]>([]);
-  const players = ref<Array<{ name: string; role_id: string }>>([]);
+  const players = ref<Map<string, { name: string; role_id: string }>>(new Map());
   const currentEvent = ref<string>('');
 
   // New state for private information
@@ -49,9 +49,9 @@ export const useGameStore = defineStore('game', () => {
         currentEvent.value = msg.content;
         break;
       case 'player_joined':
-        // Add to players array if not already present
-        if (!players.value.some(p => p.name === msg.player_name)) {
-          players.value.push({ name: msg.player_name, role_id: '' });
+        // Add to players map if not already present
+        if (!Array.from(players.value.values()).some(p => p.name === msg.player_name)) {
+          players.value.set(msg.player_name, { name: msg.player_name, role_id: '' });
         }
         break;
       case 'role_assigned':
@@ -117,7 +117,12 @@ export const useGameStore = defineStore('game', () => {
         }
         break;
       case 'player_left':
-        players.value = players.value.filter(p => p.name !== msg.player_name);
+        for (const [pid, p] of players.value) {
+          if (p.name === msg.player_name) {
+            players.value.delete(pid);
+            break;
+          }
+        }
         break;
     }
   }

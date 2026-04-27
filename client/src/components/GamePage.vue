@@ -9,94 +9,126 @@
 
     <!-- Main content -->
     <div class="game-body">
-      <!-- Left: Event display + Chat -->
+      <!-- Left: Public info -->
       <div class="main-panel">
         <!-- DM Event Display -->
         <div class="event-section">
-          <h2>📜 当前事件</h2>
+          <h2>📜 公共事件</h2>
           <div v-if="currentEvent" class="event-content">{{ currentEvent }}</div>
           <div v-else class="no-event">等待DM发布事件...</div>
         </div>
 
-        <!-- Chat Panel -->
+        <!-- Public Chat -->
         <div class="chat-section">
-          <h2>💬 聊天</h2>
+          <h2>💬 公共聊天</h2>
           <div class="messages" ref="messageContainer">
-            <div v-for="(msg, i) in messages" :key="i" class="message-item" :class="{ 'dm-message': msg.from === '__dm__' }">
+            <div
+              v-for="(msg, i) in publicMessages"
+              :key="i"
+              class="message-item"
+              :class="{ 'dm-message': msg.from === '__dm__' }"
+            >
               <span class="sender">{{ msg.from === '__dm__' ? '🎭 DM' : msg.from }}</span>
               <span class="text">{{ msg.content }}</span>
             </div>
           </div>
           <div class="chat-input-row">
-            <input v-model="newMessage" @keyup.enter="sendMessage" placeholder="输入消息..." />
-            <button @click="sendMessage">发送</button>
+            <input v-model="newMessage" @keyup.enter="sendPublicChat" placeholder="输入公共消息..." />
+            <button @click="sendPublicChat">发送</button>
           </div>
         </div>
       </div>
 
-      <!-- Right: Players + Actions -->
+      <!-- Right: Private info tabs -->
       <aside class="side-panel">
-        <!-- Admin Panel (only for admin) -->
-        <AdminPanel
-          v-if="isAdmin"
-          :loading="adminLoading"
-          :dm-log="dmLog"
-          @push-event="handlePushEvent"
-          @force-trial="handleForceTrial"
-          @end-game="handleEndGame"
-          @add-clue="handleAddClue"
-        />
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+          <button
+            v-for="tab in tabs"
+            :key="tab.key"
+            :class="{ active: activeTab === tab.key }"
+            @click="activeTab = tab.key"
+          >
+            {{ tab.icon }} {{ tab.label }}
+          </button>
+        </div>
 
-        <!-- Player List -->
-        <div class="players-section">
-          <h2>👥 玩家 ({{ playerCount }})</h2>
-          <div v-for="(player, pid) in players" :key="pid" class="player-item">
-            <span>{{ player.name }}</span>
-            <span class="role-tag">{{ player.role_name || '#' + player.role_id.slice(-4) }}</span>
+        <!-- Tab Content -->
+        <div class="tab-content">
+          <!-- Role Card Tab -->
+          <RoleCard v-if="activeTab === 'role'" />
+
+          <!-- Private Chat Tab -->
+          <PrivateChatPanel v-if="activeTab === 'private'" />
+
+          <!-- Clues Tab -->
+          <ClueCardPanel v-if="activeTab === 'clue'" />
+
+          <!-- Actions Tab -->
+          <div v-if="activeTab === 'action'" class="actions-panel">
+            <!-- Player List (names only, no roles) -->
+            <div class="players-section">
+              <h2>👥 玩家 ({{ playerCount }})</h2>
+              <div v-for="player in playersList" :key="player.pid" class="player-item">
+                <span>{{ player.name }}</span>
+                <span v-if="player.pid === roomCreatorId" class="admin-tag">👑</span>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div v-if="phase === 'playing'" class="actions-section">
+              <h2>⚡ 操作</h2>
+              <button @click="requestClue" :disabled="phase !== 'playing'">请求线索</button>
+              <button @click="showAccusation = true" :disabled="phase !== 'playing'">开始指控</button>
+            </div>
+
+            <!-- Accusation Panel -->
+            <div v-if="showAccusation && phase === 'playing'" class="accusation-section">
+              <h2>🔍 指控凶手</h2>
+              <select v-model="targetRole">
+                <option value="">选择目标...</option>
+                <option v-for="(player, pid) in playersList" :key="pid" :value="player.role_id || player.name">
+                  {{ player.name }}
+                </option>
+              </select>
+              <textarea v-model="reasoning" placeholder="写下你的推理..."></textarea>
+              <div class="accusation-buttons">
+                <button @click="submitAccusation" :disabled="!targetRole || !reasoning">提交指控</button>
+                <button @click="showAccusation = false" class="cancel-btn">取消</button>
+              </div>
+            </div>
+
+            <!-- Vote Panel -->
+            <div v-if="phase === 'trial'" class="vote-section">
+              <h2>🗳️ 投票环节</h2>
+              <select v-model="voteTarget">
+                <option value="">选择目标...</option>
+                <option v-for="(player, pid) in playersList" :key="pid" :value="player.role_id || player.name">
+                  {{ player.name }}
+                </option>
+              </select>
+              <textarea v-model="voteReasoning" placeholder="写下你的推理..."></textarea>
+              <button @click="submitVote" :disabled="!voteTarget || !voteReasoning">提交投票</button>
+            </div>
+
+            <!-- Reveal Section -->
+            <div v-if="phase === 'revealed'" class="reveal-section">
+              <h2>📢 真相揭晓</h2>
+              <p>{{ currentEvent || '游戏已结束' }}</p>
+              <button @click="$router.push('/')" class="back-btn">返回首页</button>
+            </div>
+
+            <!-- Admin Panel -->
+            <AdminPanel
+              v-if="isAdmin && activeTab === 'action'"
+              :loading="adminLoading"
+              :dm-log="dmLog"
+              @push-event="handlePushEvent"
+              @force-trial="handleForceTrial"
+              @end-game="handleEndGame"
+              @add-clue="handleAddClue"
+            />
           </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div v-if="phase === 'playing'" class="actions-section">
-          <h2>⚡ 操作</h2>
-          <button @click="requestClue" :disabled="phase !== 'playing'">请求线索</button>
-          <button @click="startAccusation" :disabled="phase !== 'playing'">开始指控</button>
-        </div>
-
-        <!-- Accusation Panel -->
-        <div v-if="showAccusation" class="accusation-section">
-          <h2>🔍 指控凶手</h2>
-          <select v-model="targetRole">
-            <option value="">选择目标...</option>
-            <option v-for="(player, pid) in players" :key="pid" :value="player.role_id || player.name">
-              {{ player.name }} ({{ player.role_name || '角色' }})
-            </option>
-          </select>
-          <textarea v-model="reasoning" placeholder="写下你的推理..."></textarea>
-          <div class="accusation-buttons">
-            <button @click="submitAccusation" :disabled="!targetRole || !reasoning">提交指控</button>
-            <button @click="showAccusation = false" class="cancel-btn">取消</button>
-          </div>
-        </div>
-
-        <!-- Vote Panel -->
-        <div v-if="phase === 'trial'" class="vote-section">
-          <h2>🗳️ 投票环节</h2>
-          <select v-model="voteTarget">
-            <option value="">选择目标...</option>
-            <option v-for="(player, pid) in players" :key="pid" :value="player.role_id || player.name">
-              {{ player.name }} ({{ player.role_name || '角色' }})
-            </option>
-          </select>
-          <textarea v-model="voteReasoning" placeholder="写下你的推理..."></textarea>
-          <button @click="submitVote" :disabled="!voteTarget || !voteReasoning">提交投票</button>
-        </div>
-
-        <!-- Reveal Section -->
-        <div v-if="phase === 'revealed'" class="reveal-section">
-          <h2>📢 真相揭晓</h2>
-          <p>{{ currentEvent || '游戏已结束' }}</p>
-          <button @click="$router.push('/')" class="back-btn">返回首页</button>
         </div>
       </aside>
     </div>
@@ -104,26 +136,48 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
+import { useGameStore } from '../stores/game';
 import GameTimer from './GameTimer.vue';
 import AdminPanel from './AdminPanel.vue';
+import RoleCard from './RoleCard.vue';
+import PrivateChatPanel from './PrivateChatPanel.vue';
+import ClueCardPanel from './ClueCardPanel.vue';
 
 const route = useRoute();
 const gameId = route.params.gameId as string;
-const playerId = localStorage.getItem(`player_${gameId}`) || localStorage.getItem('player_id') || '';
+const playerId = localStorage.getItem(`player_${gameId}`) || localStorage.getItem(`admin_${gameId}`) || localStorage.getItem('player_id') || '';
 
-// State
+const store = useGameStore();
+
+// Local refs for writable state, synced to store via watchers
 const phase = ref<'waiting' | 'playing' | 'trial' | 'revealed' | 'finished'>('playing');
 const act = ref(1);
-const scriptTitle = ref('');
-const players = ref<Record<string, { name: string; role_id: string; role_name?: string }>>({});
-const messages = ref<Array<{ from: string; content: string }>>([]);
 const currentEvent = ref('');
+const activeTab = computed(() => store.activeTab);
+const playersMap = computed(() => store.players);
+
+watch(phase, (v) => { (store.phase as any).value = v; });
+watch(act, (v) => { (store.act as any).value = v; });
+watch(currentEvent, (v) => { (store.currentEvent as any).value = v; });
+
+// State local to this component
+const scriptTitle = ref('');
+const publicMessages = ref<Array<{ from: string; content: string }>>([]);
 const newMessage = ref('');
 const isAdmin = ref(false);
+const roomCreatorId = ref('');
 const dmLog = ref<string[]>([]);
-const timerSeconds = ref(3600); // default 60 minutes
+const timerSeconds = ref(3600);
+
+// Tabs
+const tabs = [
+  { key: 'role' as const, icon: '📋', label: '角色卡' },
+  { key: 'private' as const, icon: '💌', label: '私信' },
+  { key: 'clue' as const, icon: '🔍', label: '线索' },
+  { key: 'action' as const, icon: '⚡', label: '操作' },
+];
 
 // Accusation state
 const showAccusation = ref(false);
@@ -141,6 +195,11 @@ const adminLoading = ref(false);
 let ws: WebSocket | null = null;
 const messageContainer = ref<HTMLElement | null>(null);
 
+// Convert players Map to array with keys for v-for
+const playersList = computed<Array<{ pid: string; name: string; role_id: string }>>(() => {
+  return Array.from(playersMap.value.entries()).map(([pid, p]) => ({ pid: pid as string, ...p }));
+});
+
 const phaseText = computed(() => {
   const map: Record<string, string> = {
     waiting: '等待中', playing: '游戏中', trial: '审判阶段', revealed: '真相揭晓', finished: '游戏结束'
@@ -148,7 +207,7 @@ const phaseText = computed(() => {
   return map[phase.value] || phase.value;
 });
 
-const playerCount = computed(() => Object.keys(players.value).length);
+const playerCount = computed(() => playersList.value.length);
 
 // Fetch game state via HTTP
 async function fetchState() {
@@ -158,29 +217,30 @@ async function fetchState() {
     const data = await res.json();
     phase.value = data.phase || 'playing';
     act.value = data.act || 1;
-    players.value = data.players || {};
+    roomCreatorId.value = data.room_creator_id || '';
     isAdmin.value = data.room_creator_id === playerId;
 
-    // Update timer from game state (max_duration_minutes)
     if (phase.value === 'playing') {
-      // We don't get timer directly from API, so estimate from script estimated_time
-      // For now use a default 90 minutes
       timerSeconds.value = 90 * 60;
     }
 
     // Update messages from server
     if (data.public_messages && data.public_messages.length > 0) {
-      const existingCount = messages.value.length;
+      const existingCount = publicMessages.value.length;
       const newMessages = data.public_messages.slice(existingCount);
       for (const m of newMessages) {
-        messages.value.push({ from: m.from_player_id, content: m.content });
+        publicMessages.value.push({ from: m.from_player_id, content: m.content });
         if (m.type === 'event') {
           currentEvent.value = m.content;
         }
       }
     }
 
-    // Scroll to bottom
+    // Update players in store
+    for (const [pid, p] of Object.entries(data.players || {})) {
+      playersMap.value.set(pid, { name: (p as any).name, role_id: (p as any).role_id });
+    }
+
     await nextTick();
     if (messageContainer.value) {
       messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
@@ -199,61 +259,10 @@ function connectWebSocket() {
 
   ws.onmessage = (event) => {
     const msg = JSON.parse(event.data);
-    switch (msg.type) {
-      case 'chat':
-        messages.value.push({ from: msg.from, content: msg.content });
-        break;
-      case 'private_chat':
-        // Private chat — only show to sender and receiver
-        messages.value.push({ from: msg.from === playerId ? '我(私聊)' : '(私聊) ' + msg.from, content: msg.content });
-        break;
-      case 'event':
-        currentEvent.value = msg.content;
-        messages.value.push({ from: '__dm__', content: msg.content });
-        break;
-      case 'system':
-        messages.value.push({ from: '系统', content: msg.content });
-        break;
-      case 'clue_reveal':
-        const clueText = msg.public
-          ? `🔍 新线索（公开）：${msg.clue.title} — ${msg.clue.content}`
-          : `🔍 你的私人线索：${msg.clue.title} — ${msg.clue.content}`;
-        currentEvent.value = clueText;
-        messages.value.push({ from: '__dm__', content: clueText });
-        break;
-      case 'accusation':
-        messages.value.push({ from: msg.from, content: `指控 ${msg.target}: ${msg.reasoning}` });
-        break;
-      case 'vote_result':
-        const voteSummary = `🗳️ 投票结果（第${msg.round}轮）: ${Object.entries(msg.results).map(([name, count]) => `${name}: ${count}票`).join(', ')}`;
-        messages.value.push({ from: '系统', content: voteSummary });
-        if (msg.consensus) {
-          messages.value.push({ from: '系统', content: '✅ 达成共识！进入真相揭晓环节' });
-        }
-        break;
-      case 'trial_start':
-        phase.value = 'trial';
-        act.value = 3;
-        break;
-      case 'reveal':
-        phase.value = 'revealed';
-        currentEvent.value = JSON.stringify(msg.truth);
-        break;
-      case 'game_over':
-        phase.value = 'finished';
-        const resultText = msg.result === 'correct' ? '真相正确！' : msg.result === 'wrong' ? '真相错误！' : '时间耗尽！';
-        messages.value.push({ from: '系统', content: `游戏结束：${resultText}` });
-        break;
-      case 'player_joined':
-        messages.value.push({ from: '系统', content: `${msg.player_name} 加入了游戏` });
-        break;
-      case 'player_left':
-        messages.value.push({ from: '系统', content: `${msg.player_name} 离开了游戏` });
-        break;
-      case 'role_assigned':
-        messages.value.push({ from: '系统', content: `你的角色：${(msg.role as any)?.name || '未知'}` });
-        break;
-    }
+    // Route through store for state management
+    store.handleWSMessage(msg as any);
+
+    // Scroll to bottom for public messages
     nextTick(() => {
       if (messageContainer.value) messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
     });
@@ -271,12 +280,11 @@ function sendWSMessage(type: string, data: Record<string, any> = {}) {
   }
 }
 
-// Send chat message
-async function sendMessage() {
+// Send public chat
+async function sendPublicChat() {
   const text = newMessage.value.trim();
   if (!text || !playerId) return;
 
-  // Send via WebSocket (real-time) and HTTP (persistence)
   sendWSMessage('chat', { content: text });
 
   try {
@@ -291,11 +299,8 @@ async function sendMessage() {
 }
 
 async function requestClue() {
-  // Send WS request_advance to trigger LLM event generation
   sendWSMessage('request_advance');
 }
-
-function startAccusation() { showAccusation.value = true; }
 
 async function submitAccusation() {
   if (!targetRole.value || !reasoning.value) return;
@@ -338,9 +343,12 @@ async function handlePushEvent() {
       const data = await res.json();
       currentEvent.value = data.content;
     } else {
-      alert('推进剧情失败');
+      const err = await res.json().catch(() => ({}));
+      alert(`推进剧情失败: ${err.detail || '未知错误'}`);
     }
-  } catch (e) { console.error(e); } finally { adminLoading.value = false; }
+  } catch (e) {
+    alert('推进剧情失败: 网络错误');
+  } finally { adminLoading.value = false; }
 }
 
 async function handleAddClue(clue: { title: string; content: string }) {
@@ -381,7 +389,7 @@ async function handleEndGame() {
 onMounted(() => {
   fetchState();
   connectWebSocket();
-  const interval = setInterval(fetchState, 5000); // Slower polling since we have WS
+  const interval = setInterval(fetchState, 5000);
   return () => clearInterval(interval);
 });
 
@@ -415,12 +423,40 @@ onUnmounted(() => {
 .chat-input-row input { flex: 1; padding: 10px; border: 1px solid #444; border-radius: 6px; background: rgba(0, 0, 0, 0.3); color: #eee; }
 .chat-input-row button { padding: 10px 20px; border: none; border-radius: 6px; background: #e94560; color: #fff; cursor: pointer; }
 
-.side-panel { width: 320px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; max-height: calc(100vh - 80px); }
-.players-section, .actions-section, .accusation-section, .vote-section, .reveal-section { background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 16px; }
+.side-panel { width: 360px; flex-shrink: 0; display: flex; flex-direction: column; overflow-y: auto; max-height: calc(100vh - 80px); }
+
+.tab-nav { display: flex; gap: 4px; margin-bottom: 8px; }
+.tab-nav button {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #aaa;
+  cursor: pointer;
+  font-size: 13px;
+}
+.tab-nav button.active {
+  background: #e94560;
+  color: #fff;
+}
+
+.tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.players-section, .actions-section, .accusation-section, .vote-section, .reveal-section {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
 h2 { font-size: 14px; color: #aaa; margin-bottom: 12px; }
 
 .player-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
-.role-tag { font-size: 12px; color: #666; }
+.admin-tag { font-size: 12px; color: #f39c12; font-weight: bold; }
 
 .actions-section button { width: 100%; padding: 10px; margin-bottom: 8px; border: none; border-radius: 6px; background: #0f3460; color: #eee; cursor: pointer; }
 .actions-section button:disabled { opacity: 0.5; cursor: not-allowed; }
