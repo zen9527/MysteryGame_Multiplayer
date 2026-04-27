@@ -2,7 +2,7 @@ export type WSMessage =
   | { type: "system"; content: string }
   | { type: "event"; content: string }
   | { type: "clue_reveal"; clue: object; public: boolean; to_player_id?: string }
-  | { type: "chat"; from: string; content: string; timestamp: string }
+  | { type: "chat"; from: string; from_player_id?: string; content: string; timestamp: string }
   | { type: "private_chat"; from: string; content: string; timestamp: string }
   | { type: "accusation"; from: string; target: string; reasoning: string }
   | { type: "trial_start"; accusations: object[] }

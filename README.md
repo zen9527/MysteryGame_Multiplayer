@@ -8,8 +8,10 @@
 - **LLM 全权主持** — 自动生成剧本、角色卡、线索、复盘总结
 - **6 种剧本类型** — 悬疑推理 / 古风权谋 / 现代都市 / 恐怖惊悚 / 欢乐搞笑 / 科幻未来
 - **完整游戏流程** — 选本 → 生成剧本 → 阅读角色卡 → 自我介绍 → 搜证 → 讨论 → 投票 → 审判 → 揭晓 → 复盘
-- **公聊 + 私聊** — 全局讨论与玩家间一对一私聊
+- **信息隔离** — 角色卡分层解锁（3 层），DM 私信，个人线索，公共/私人信息严格隔离
+- **公聊 + 私聊** — 全局讨论与玩家间一对一私聊，DM 可向特定玩家发送私信
 - **审判系统** — accusation + 多轮投票 + 真相揭晓
+- **断线重连** — WS 重连自动恢复角色卡、线索、私信和聊天历史
 
 ## 🚀 快速开始
 
@@ -70,10 +72,22 @@ npm run dev
 │   ├── src/
 │   │   ├── App.vue
 │   │   ├── main.ts
-│   │   ├── stores/game.ts     # Pinia 状态管理
+│   │   ├── router.ts          # Vue Router 路由配置
+│   │   ├── stores/game.ts     # Pinia 状态管理（角色卡、私信、线索、公聊、去重）
 │   │   ├── types/ws.ts        # WebSocket 类型定义
-│   │   ├── utils/ws.ts        # WebSocket 连接管理
-│   │   └── components/        # UI 组件
+│   │   ├── utils/ws.ts        # WebSocketManager（已废弃 — GamePage 使用直连 WS）
+│   │   └── components/        # 11 个组件
+│   │       ├── GamePage.vue           # 主游戏页面（左：公聊/事件，右：Tab 导航）
+│   │       ├── RoleCard.vue           # 角色卡（分层解锁 + 折叠）
+│   │       ├── PrivateChatPanel.vue   # DM 私信面板
+│   │       ├── ClueCardPanel.vue      # 线索卡片（展开/折叠）
+│   │       ├── WaitingLobby.vue       # 等待大厅
+│   │       ├── RoomList.vue           # 房间列表
+│   │       ├── RoomJoin.vue           # 加入房间
+│   │       ├── GameTimer.vue          # 倒计时组件
+│   │       ├── AdminPanel.vue         # 管理员面板
+│   │       ├── ScriptEditor.vue       # 剧本编辑器
+│   │       └── ChatPanel.vue          # 聊天面板（遗留组件）
 │   └── tests/                 # 前端组件测试
 │
 ├── shared/                    # 共享类型/Schema
@@ -103,4 +117,5 @@ npm test
 ---
 
 **作者**: Flex  
-**版本**: v4.0.0
+**版本**: v5.0.0  
+**最近更新**: 信息隔离系统 + 断线重连 + 聊天去重

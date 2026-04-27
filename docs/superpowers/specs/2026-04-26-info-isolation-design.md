@@ -174,13 +174,17 @@ export type WSMessage =
 ### 3. `client/src/stores/game.ts` — 新增状态
 
 ```typescript
-const roleCard = ref<{ layer1: Role; layer2: Role; layer3: Role }>({
+const roleCard = ref<{ layer1: RoleCardData | null; layer2: RoleCardData | null; layer3: RoleCardData | null }>({
   layer1: null, layer2: null, layer3: null
 });
-const privateMessages = ref<Array<{ from: string; content: string }>>([]);
-const clues = ref<Array<ClueData>>([]);
-const activeTab = ref<'role' | 'private' | 'clue' | 'action'>('role');
+const privateMessages = ref<Array<{ from: string; content: string; timestamp: string }>>([]);
+const clues = ref<Array<ClueData>>([]);  // Array, not Map
+const activeTab = ref<'role' | 'private' | 'clue' | 'action'>('role');  // In Pinia store
+const publicMessages = ref<ChatMessage[]>([]);  // Deduplicated via seenMessageKeys
+const seenMessageKeys = ref<Set<string>>(new Set());  // Prevent duplicate messages
 ```
+
+**Note**: `ChatPanel.vue` exists as a legacy component but is no longer used — GamePage.vue handles public chat directly.
 
 ## 进度显示
 

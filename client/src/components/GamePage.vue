@@ -26,9 +26,9 @@
               v-for="(msg, i) in publicMessages"
               :key="i"
               class="message-item"
-              :class="{ 'dm-message': msg.from === '__dm__' }"
+              :class="{ 'dm-message': msg.from === '🎭 DM' || msg.isEvent }"
             >
-              <span class="sender">{{ msg.from === '__dm__' ? '🎭 DM' : msg.from }}</span>
+              <span class="sender">{{ msg.from }}</span>
               <span class="text">{{ msg.content }}</span>
             </div>
           </div>
@@ -151,7 +151,7 @@ const gameId = route.params.gameId as string;
 const playerId = localStorage.getItem(`player_${gameId}`) || localStorage.getItem(`admin_${gameId}`) || localStorage.getItem('player_id') || '';
 
 const store = useGameStore();
-const { phase: storePhase, act: storeAct, currentEvent: storeCurrentEvent, activeTab: storeActiveTab, players: storePlayers } = storeToRefs(store);
+const { phase: storePhase, act: storeAct, currentEvent: storeCurrentEvent, activeTab: storeActiveTab, players: storePlayers, publicMessages: storePublicMessages } = storeToRefs(store);
 
 // Local refs synced bidirectionally with store
 const phase = ref<'waiting' | 'playing' | 'trial' | 'revealed' | 'finished'>('playing');
@@ -159,6 +159,7 @@ const act = ref(1);
 const currentEvent = ref('');
 const activeTab = computed(() => storeActiveTab.value);
 const playersMap = computed(() => storePlayers.value);
+const publicMessages = computed(() => storePublicMessages.value);
 
 // Store → Local (WS messages update store, watchers sync to local)
 watch(storePhase, (v) => { phase.value = v; });
@@ -167,7 +168,6 @@ watch(storeCurrentEvent, (v) => { currentEvent.value = v; });
 
 // State local to this component
 const scriptTitle = ref('');
-const publicMessages = ref<Array<{ from: string; content: string }>>([]);
 const newMessage = ref('');
 const isAdmin = ref(false);
 const roomCreatorId = ref('');
@@ -227,21 +227,14 @@ async function fetchState() {
       timerSeconds.value = 90 * 60;
     }
 
-    // Update messages from server
-    if (data.public_messages && data.public_messages.length > 0) {
-      const existingCount = publicMessages.value.length;
-      const newMessages = data.public_messages.slice(existingCount);
-      for (const m of newMessages) {
-        publicMessages.value.push({ from: m.from_player_id, content: m.content });
-        if (m.type === 'event') {
-          currentEvent.value = m.content;
-        }
-      }
-    }
-
     // Update players in store
     for (const [pid, p] of Object.entries(data.players || {})) {
       playersMap.value.set(pid, { name: (p as any).name, role_id: (p as any).role_id });
+    }
+
+    // Load public messages from API into store (deduplicated)
+    if (data.public_messages && data.public_messages.length > 0) {
+      store.loadPublicMessagesFromAPI(data.public_messages);
     }
 
     await nextTick();
@@ -265,10 +258,12 @@ function connectWebSocket() {
     // Route through store for state management
     store.handleWSMessage(msg as any);
 
-    // Scroll to bottom for public messages
-    nextTick(() => {
-      if (messageContainer.value) messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
-    });
+    // Scroll to bottom for any chat/event messages
+    if (msg.type === 'chat' || msg.type === 'event') {
+      nextTick(() => {
+        if (messageContainer.value) messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
+      });
+    }
   };
 
   ws.onclose = () => {
@@ -283,21 +278,12 @@ function sendWSMessage(type: string, data: Record<string, any> = {}) {
   }
 }
 
-// Send public chat
+// Send public chat (WS only — server handles persistence)
 async function sendPublicChat() {
   const text = newMessage.value.trim();
   if (!text || !playerId) return;
 
   sendWSMessage('chat', { content: text });
-
-  try {
-    await fetch(`/api/rooms/${gameId}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player_id: playerId, message: text, is_private: false }),
-    });
-  } catch (e) { console.error(e); }
-
   newMessage.value = '';
 }
 

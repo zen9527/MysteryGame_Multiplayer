@@ -176,7 +176,20 @@ async def get_room(game_id: str):
         } if state.script_generated else None,
         "clues": [c.model_dump() for c in state.script.clues],
         "votes": [v.model_dump() for v in state.votes],
-        "public_messages": [m.model_dump() for m in state.public_messages[-50:]],  # last 50
+        "public_messages": [
+            {
+                "from_player_id": m.from_player_id,
+                "from_player_name": (
+                    "🎭 DM" if m.from_player_id == "__dm__"
+                    else state.players[m.from_player_id].name if m.from_player_id in state.players
+                    else m.from_player_id
+                ),
+                "content": m.content,
+                "type": m.type,
+                "timestamp": str(m.timestamp),
+            }
+            for m in state.public_messages[-50:]
+        ],
     }
 
 
@@ -371,30 +384,51 @@ async def start_game(game_id: str):
     if not state.script_generated:
         raise HTTPException(status_code=400, detail="先生成剧本再开始游戏")
     manager.start_game(game_id)
+
+    # unlock_phase with new_act=1 (act1), which maps to layer 2 role cards + act1 clues + private events
+    # This also caches distributions in GameState for WS reconnect
     unlock_result = manager.unlock_phase(game_id, "playing", 1)
+
+    # Also cache layer 1 role cards (name + description) for all players
+    for pid, player in state.players.items():
+        if player.role:
+            if pid not in state.distributed_role_cards:
+                state.distributed_role_cards[pid] = []
+            state.distributed_role_cards[pid].append({
+                "type": "role_card",
+                "layer": "1",
+                "player_id": pid,
+                "data": {
+                    "name": player.role.name,
+                    "description": player.role.description,
+                },
+            })
+
     from server.websocket_hub import hub
+
+    # Try to send to any already-connected players (may be none if they haven't navigated yet)
+    # Broadcast phase unlock
+    await hub.broadcast(game_id, {
+        "type": "phase_unlock",
+        "phase": "playing",
+        "act": 1,
+    })
+
+    # Send layer 1 role cards
+    for pid, player in state.players.items():
+        if player.role:
+            await hub.send_to_player(game_id, pid, {
+                "type": "role_card",
+                "layer": "1",
+                "player_id": pid,
+                "data": {
+                    "name": player.role.name,
+                    "description": player.role.description,
+                },
+            })
+
+    # Send layer 2 role cards from unlock_result
     if unlock_result:
-        # Phase unlock notification (phase stays "playing", act changes)
-        await hub.broadcast(game_id, {
-            "type": "phase_unlock",
-            "phase": "playing",
-            "act": 1,
-        })
-
-        # Distribute role card layer 1 (name + description) to all players
-        for pid, player in state.players.items():
-            if player.role:
-                await hub.send_to_player(game_id, pid, {
-                    "type": "role_card",
-                    "layer": "1",
-                    "player_id": pid,
-                    "data": {
-                        "name": player.role.name,
-                        "description": player.role.description,
-                    },
-                })
-
-        # Distribute role card layer 2 (background, secret task, alibi)
         for pid, card_data in unlock_result["role_cards"].items():
             await hub.send_to_player(game_id, pid, {
                 "type": "role_card",
@@ -403,7 +437,7 @@ async def start_game(game_id: str):
                 "data": card_data,
             })
 
-        # Distribute clues (list per player — one message per clue)
+        # Send clues
         for pid, clue_list in unlock_result["clues"].items():
             for clue_data in clue_list:
                 await hub.send_to_player(game_id, pid, {

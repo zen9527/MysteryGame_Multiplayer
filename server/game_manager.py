@@ -248,9 +248,62 @@ class GameManager:
                 results.append((player_id, event.content))
         return results
 
+    def cache_distribution(self, game_id: str, role_cards: dict, clues: dict, private_events: list):
+        """Cache distributed data in GameState so it can be resent on WS (re)connect."""
+        if game_id not in self.games:
+            return
+        state = self.games[game_id]
+
+        # Cache role cards per player
+        for pid, card_data in role_cards.items():
+            if pid not in state.distributed_role_cards:
+                state.distributed_role_cards[pid] = []
+            # Determine layer from the data content
+            layer = "2" if "background" in card_data else "3"
+            state.distributed_role_cards[pid].append({
+                "type": "role_card",
+                "layer": layer,
+                "player_id": pid,
+                "data": card_data,
+            })
+
+        # Cache clues per player
+        for pid, clue_list in clues.items():
+            if pid not in state.distributed_clues:
+                state.distributed_clues[pid] = []
+            for clue_data in clue_list:
+                state.distributed_clues[pid].append({
+                    "type": "clue_unlock",
+                    "player_id": pid,
+                    "clue": clue_data,
+                })
+
+        # Cache DM private messages
+        for pid, content in private_events:
+            if pid not in state.distributed_dm_private:
+                state.distributed_dm_private[pid] = []
+            state.distributed_dm_private[pid].append({
+                "type": "dm_private",
+                "from": "__dm__",
+                "to": pid,
+                "content": content,
+            })
+
+    def get_pending_distributions(self, game_id: str, player_id: str) -> list:
+        """Get all cached distribution messages for a player (for WS connect/resend)."""
+        if game_id not in self.games:
+            return []
+        state = self.games[game_id]
+        messages = []
+        messages.extend(state.distributed_role_cards.get(player_id, []))
+        messages.extend(state.distributed_clues.get(player_id, []))
+        messages.extend(state.distributed_dm_private.get(player_id, []))
+        return messages
+
     def unlock_phase(self, game_id: str, new_phase: str, new_act: int):
         """阶段解锁：切换阶段并执行该阶段的所有自动分发。
-        返回 {role_cards: {pid: layer_data}, clues: {pid: [clue_data, ...]}, private_events: [(pid, content)]}
+        new_phase is the act phase: "act1", "act2", "act3", etc.
+        Returns {role_cards: {pid: layer_data}, clues: {pid: [clue_data]}, private_events: [(pid, content)]}
         """
         if game_id not in self.games:
             return None
@@ -263,11 +316,14 @@ class GameManager:
         clues = {}
         private_events = []
 
+        # Layer map: act1 → layer 2, act2 → layer 3
         layer_map = {
             "act1": "2",
             "act2": "3",
         }
-        layer_to_unlock = layer_map.get(new_phase)
+        # Build the act key from the act number
+        act_key = f"act{new_act}"
+        layer_to_unlock = layer_map.get(act_key)
 
         if layer_to_unlock:
             for pid, player in state.players.items():
@@ -276,10 +332,9 @@ class GameManager:
                     role_cards[pid] = card_data
 
         for clue in state.script.clues:
-            if clue.unlock_phase == new_phase:
+            if clue.unlock_phase == act_key:
                 # Determine targets: if empty, distribute to all players (public clue)
                 if clue.target_player_ids:
-                    # Iterate over players, match by role name
                     for pid, player in state.players.items():
                         if player.role and player.role.name in clue.target_player_ids:
                             clue_data = self.distribute_clue(game_id, clue.id, pid)
@@ -292,7 +347,10 @@ class GameManager:
                         if clue_data:
                             clues.setdefault(pid, []).append(clue_data)
 
-        private_events = self.execute_private_events(game_id, new_phase)
+        private_events = self.execute_private_events(game_id, act_key)
+
+        # Cache the distributions for WS reconnect
+        self.cache_distribution(game_id, role_cards, clues, private_events)
 
         return {
             "role_cards": role_cards,

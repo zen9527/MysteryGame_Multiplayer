@@ -109,3 +109,8 @@ class GameState(BaseModel):
     host_message_history: List[str] = Field(default_factory=list)
     dm_log: List[str] = Field(default_factory=list)  # LLM推理日志
     script_generated: bool = False  # 是否已生成剧本
+
+    # Distribution cache: stores WS messages to resend on player (re)connect
+    distributed_role_cards: dict[str, List[dict]] = Field(default_factory=dict)  # pid -> [{type, layer, data}, ...]
+    distributed_clues: dict[str, List[dict]] = Field(default_factory=dict)  # pid -> [{type, clue}, ...]
+    distributed_dm_private: dict[str, List[dict]] = Field(default_factory=dict)  # pid -> [{type, from, to, content}, ...]

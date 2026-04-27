@@ -68,11 +68,17 @@ class WebSocketHub:
 
         if msg_type == "chat":
             content = data.get("content", "")
+            # Get player name for the broadcast
+            state = manager.get_state(room_id)
+            player_name = player_id
+            if state and player_id in state.players:
+                player_name = state.players[player_id].name
             manager.add_chat_message(room_id, player_id, content, False, None)
-            # Broadcast chat to all players in room
+            # Broadcast chat with player NAME (not ID) to all players in room
             await self.broadcast(room_id, {
                 "type": "chat",
-                "from": player_id,
+                "from": player_name,
+                "from_player_id": player_id,
                 "content": content,
                 "timestamp": "",
             })
@@ -130,6 +136,55 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, player_id: str)
     # Send current state to newly connected player
     state = manager.get_state(room_id)
     if state:
+        # Phase unlock
+        await hub.send_to_player(room_id, player_id, {
+            "type": "phase_unlock",
+            "phase": state.phase,
+            "act": state.act,
+        })
+
+        # Resend cached role card layer 1 (always available once game started)
+        if state.phase != "waiting" and player_id in state.players:
+            player = state.players[player_id]
+            if player.role:
+                await hub.send_to_player(room_id, player_id, {
+                    "type": "role_card",
+                    "layer": "1",
+                    "player_id": player_id,
+                    "data": {
+                        "name": player.role.name,
+                        "description": player.role.description,
+                    },
+                })
+
+        # Resend all cached distributions for this player
+        pending = manager.get_pending_distributions(room_id, player_id)
+        for msg in pending:
+            await hub.send_to_player(room_id, player_id, msg)
+
+        # Resend recent chat history (last 50 public messages)
+        for msg in state.public_messages[-50:]:
+            # Resolve player name
+            sender_name = msg.from_player_id
+            if msg.from_player_id == "__dm__":
+                sender_name = "🎭 DM"
+            elif msg.from_player_id in state.players:
+                sender_name = state.players[msg.from_player_id].name
+
+            if msg.type == "event":
+                await hub.send_to_player(room_id, player_id, {
+                    "type": "event",
+                    "content": msg.content,
+                })
+            else:
+                await hub.send_to_player(room_id, player_id, {
+                    "type": "chat",
+                    "from": sender_name,
+                    "from_player_id": msg.from_player_id,
+                    "content": msg.content,
+                    "timestamp": "",
+                })
+
         await hub.send_to_player(room_id, player_id, {
             "type": "system",
             "content": f"你已加入房间，当前阶段: {state.phase}",

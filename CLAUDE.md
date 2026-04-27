@@ -16,9 +16,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 server/          FastAPI backend (main.py, config, models, game_manager, websocket_hub, api_routes, host_dm, llm_client, middleware)
-client/src/      Vue 3 frontend (App.vue, router.ts, stores/game.ts, types/ws.ts, utils/ws.ts, 8 components)
+client/src/      Vue 3 frontend (App.vue, router.ts, stores/game.ts, types/ws.ts, utils/ws.ts [deprecated], 11 components)
 shared/          ws_types.py — Pydantic schemas for WebSocket messages; schemas.ts — Zod schemas for frontend validation
 tests/           pytest suite (test_game_manager.py, test_integration.py, conftest.py)
+docs/            Design specs and implementation plans (docs/superpowers/)
 ```
 
 ## Key Architecture
@@ -29,7 +30,7 @@ tests/           pytest suite (test_game_manager.py, test_integration.py, confte
 - **LLMClient** (server/llm_client.py): OpenAI-compatible chat API client. Reads config from `.env` but supports runtime overrides via `set_runtime_config()`.
 - **API Routes** (server/api_routes.py): REST endpoints for room CRUD, script generation (admin-only), game control, voting, chat, LLM config. Admin actions guarded by `require_admin()`.
 - **Frontend Router**: `/` → RoomList, `/join/:gameId` → RoomJoin, `/lobby/:gameId` → WaitingLobby, `/game/:gameId` → GamePage.
-- **Frontend State**: Pinia store `useGameStore` manages phase, messages, players, currentEvent. WebSocketManager (`utils/ws.ts`) is unused — `GamePage.vue` uses direct WebSocket connections.
+- **Frontend State**: Pinia store `useGameStore` manages phase, act, messages, players, currentEvent, roleCard (3 layers), privateMessages, clues (Array), publicMessages (deduplicated via seenMessageKeys), activeTab. WebSocketManager (`utils/ws.ts`) is deprecated — `GamePage.vue` uses direct WebSocket connections with storeToRefs bidirectional sync.
 
 ## Development Commands
 
@@ -67,7 +68,13 @@ pytest tests/ -v   # Backend tests (project root is in sys.path via conftest.py)
 
 - All game state is in-memory (no database). Restarting server clears all games.
 - `server/game_manager.py` and `server/websocket_hub.py` use module-level singletons (`manager`, `hub`).
-- Frontend `game.ts` store is minimal — many WS message types have empty handlers (e.g., `chat`, `role_assigned`).
+- **Distribution Cache**: GameState stores `distributed_role_cards`, `distributed_clues`, `distributed_dm_private` — used to resend on WS (re)connect via `get_pending_distributions()`.
+- **unlock_phase**: Uses `act_key = f"act{new_act}"` to look up layer_map (not `new_phase` directly). Phase stays "playing" — acts 1/2 are within playing phase.
+- **WS on_connect**: Resends phase_unlock, cached role_card layer 1, all cached distributions, and last 50 public messages with resolved player names.
+- **Chat**: `sendPublicChat` uses WS only — server handles persistence via `manager.add_chat_message`. WS broadcast includes `from_player_id` for deduplication.
+- **get_room API**: `public_messages` includes `from_player_name` (resolved from player name or "__dm__" → "🎭 DM").
+- **Deduplication**: Frontend store uses `seenMessageKeys` Set to prevent duplicate chat messages from WS + API overlap.
+- Frontend `game.ts` store is now comprehensive — handles role_card, dm_private, clue_unlock, phase_unlock, chat deduplication, and publicMessages loading from API.
 - WebSocket endpoint path: `/ws/{room_id}/{player_id}`
 - LLM calls use OpenAI `/v1/chat/completions` format with configurable endpoint/model/key.
 - `.env` file at project root is used.
