@@ -157,7 +157,8 @@ const { phase: storePhase, act: storeAct, currentEvent: storeCurrentEvent, activ
 const phase = ref<'waiting' | 'playing' | 'trial' | 'revealed' | 'finished'>('playing');
 const act = ref(1);
 const currentEvent = ref('');
-const activeTab = computed(() => storeActiveTab.value);
+const activeTab = ref(storeActiveTab.value);
+watch(storeActiveTab, (v) => { activeTab.value = v; });
 const playersMap = computed(() => storePlayers.value);
 const publicMessages = computed(() => storePublicMessages.value);
 
@@ -272,9 +273,12 @@ function connectWebSocket() {
   };
 }
 
-function sendWSMessage(type: string, data: Record<string, any> = {}) {
+function sendWSMessage(type: string, data: Record<string, any> = {}, retries = 0) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type, ...data }));
+  } else if (ws && retries < 5) {
+    // WS not ready yet — retry up to 5 times (2.5s max)
+    setTimeout(() => sendWSMessage(type, data, retries + 1), 500);
   }
 }
 

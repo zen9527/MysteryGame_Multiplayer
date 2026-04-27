@@ -54,7 +54,9 @@ export const useGameStore = defineStore('game', () => {
   const seenMessageKeys = ref<Set<string>>(new Set());
 
   function _addPublicMessage(from: string, content: string, timestamp: string, isEvent = false) {
-    const key = `${from}:${content}:${timestamp}`;
+    // Key without timestamp — WS messages have timestamp="" while API messages have real timestamps
+    // Same message from same sender must deduplicate regardless of source
+    const key = `${from}:${content}`;
     if (seenMessageKeys.value.has(key)) return;
     seenMessageKeys.value.add(key);
     publicMessages.value.push({ from, content, timestamp, isEvent });
