@@ -56,12 +56,14 @@
 | 公共事件 | 所有玩家 | `broadcast()` |
 | 公共聊天 | 所有玩家 | `broadcast()` |
 | 角色卡 | 仅本人 | `send_to_player()` |
+| 玩家列表 | 玩家名字可见，角色名/身份隐藏 | `broadcast()`（只显示 name，不显示 role） |
 | DM→玩家私信 | 仅 DM 和该玩家 | `send_to_player()` |
 | 玩家间私聊 | 仅两个玩家 | `send_to_player()` × 2 |
 | 个人线索 | 仅分配的玩家 | `send_to_player()` |
 | 公共线索 | 所有玩家 | `broadcast()` |
 | 投票结果 | 所有玩家 | `broadcast()` |
 | 真相揭晓 | 所有玩家 | `broadcast()` |
+| 投票面板 | 只显示玩家名字，不显示角色名 | 前端限制 |
 
 ### 角色卡分层
 
