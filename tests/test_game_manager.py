@@ -277,5 +277,5 @@ def test_unlock_phase(game_manager, sample_script):
     assert "p1" in result["role_cards"]
     assert "p1" in result["clues"]
     assert len(result["private_events"]) == 1
-    assert state.phase == "act2"
+    assert state.phase == "playing"  # phase stays "playing", act changes
     assert state.act == 2
