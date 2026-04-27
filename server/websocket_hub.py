@@ -52,6 +52,16 @@ class WebSocketHub:
             except Exception:
                 pass
 
+    async def send_dm_private(self, room_id: str, target_player_id: str, content: str):
+        """DM 向特定玩家发送私信"""
+        dm_msg = {
+            "type": "dm_private",
+            "from": "__dm__",
+            "to": target_player_id,
+            "content": content,
+        }
+        await self.send_to_player(room_id, target_player_id, dm_msg)
+
     async def handle_client_message(self, room_id: str, player_id: str, data: dict):
         """处理客户端消息，路由到对应处理器"""
         msg_type = data.get("type")
@@ -71,7 +81,7 @@ class WebSocketHub:
             target = data.get("to_player_id", "")
             content = data.get("content", "")
             manager.add_chat_message(room_id, player_id, content, True, target)
-            # Send to both sender and receiver
+            # Send to both sender and receiver only
             chat_msg = {
                 "type": "private_chat",
                 "from": player_id,
@@ -79,8 +89,21 @@ class WebSocketHub:
                 "timestamp": "",
             }
             await self.send_to_player(room_id, player_id, chat_msg)
-            if target:
+            if target and target != player_id:
                 await self.send_to_player(room_id, target, chat_msg)
+
+        elif msg_type == "dm_private":
+            # DM → player private message (from API, not client)
+            target = data.get("to_player_id", "")
+            content = data.get("content", "")
+            if target:
+                dm_msg = {
+                    "type": "dm_private",
+                    "from": "__dm__",
+                    "to": target,
+                    "content": content,
+                }
+                await self.send_to_player(room_id, target, dm_msg)
 
         elif msg_type == "accuse":
             # Broadcast accusation to all players
