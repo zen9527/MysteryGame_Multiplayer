@@ -163,7 +163,7 @@ Append after `get_state` method (before `manager = GameManager()`):
             # Match target_role_name to player_id
             player_id = None
             for pid, player in state.players.items():
-                if player.role and player.role.name == event.target_player_id:
+                if player.role and player.role.name == event.target_role_name:
                     player_id = pid
                     break
             if player_id:
@@ -409,7 +409,7 @@ JSON格式要求：
   "private_events": [
     {{
       "phase": "act2",
-      "target_player_id": "角色名",
+      "target_role_name": "角色名",
       "content": "DM 私信内容",
       "trigger": null
     }}
@@ -1864,7 +1864,7 @@ def test_execute_private_events(game_manager, sample_script):
     state = game_manager.get_state("test1")
     state.script = sample_script
     state.script.private_events = [
-        PrivateEvent(phase="act2", target_player_id="角色 A", content="私信内容", trigger=None),
+        PrivateEvent(phase="act2", target_role_name="角色 A", content="私信内容", trigger=None),
     ]
     game_manager.add_player("test1", "p1", "张三")
     results = game_manager.execute_private_events("test1", "act2")
@@ -1883,7 +1883,7 @@ def test_unlock_phase(game_manager, sample_script):
              target_player_ids=["p1"], unlock_phase="act2"),
     ]
     state.script.private_events = [
-        PrivateEvent(phase="act2", target_player_id="角色 A", content="私信", trigger=None),
+        PrivateEvent(phase="act2", target_role_name="角色 A", content="私信", trigger=None),
     ]
     game_manager.add_player("test1", "p1", "张三")
     result = game_manager.unlock_phase("test1", "act2", 2)

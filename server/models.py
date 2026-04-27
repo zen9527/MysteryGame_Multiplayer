@@ -32,7 +32,7 @@ class Clue(BaseModel):
 class PrivateEvent(BaseModel):
     """DM 私信触发点 — LLM 生成剧本时规划"""
     phase: str  # act1, act2, act3, trial
-    target_player_id: str  # 目标玩家角色名（LLM 输出角色名，后端匹配 player_id）
+    target_role_name: str  # 目标玩家角色名（LLM 输出角色名，后端匹配 player_id）
     content: str  # DM 私信内容
     trigger: Optional[str] = None  # 触发条件，如"玩家请求线索时"
 
