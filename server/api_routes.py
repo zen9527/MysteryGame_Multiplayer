@@ -2,11 +2,12 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
+import json
+import uuid
 from server.models import Script, Role, Clue, PlotOutline, Vote, Accusation
 from server.game_manager import manager
 from server.host_dm import host as host_dm
 from server.middleware import require_admin
-import uuid
 
 router = APIRouter()
 
@@ -23,6 +24,32 @@ GENRES = [
 DIFFICULTIES = ["简单", "中等", "困难"]
 
 
+def _normalize_script_json(data: dict) -> dict:
+    """Normalize LLM-generated script JSON to match Pydantic schema."""
+    roles = data.get("roles", [])
+    for role in roles:
+        rels = role.get("relationships", [])
+        normalized = []
+        for r in rels:
+            if isinstance(r, dict):
+                normalized.append(r)
+            elif isinstance(r, str):
+                normalized.append({"target": r, "description": r})
+        role["relationships"] = normalized
+
+    clues = data.get("clues", [])
+    for clue in clues:
+        clue.setdefault("target_player_ids", [])
+        clue.setdefault("unlock_phase", "act2")
+        clue.setdefault("trigger_condition", None)
+
+    private_events = data.get("private_events", [])
+    for event in private_events:
+        event.setdefault("trigger", None)
+
+    return data
+
+
 # --- Request models ---
 
 class PlayerJoinRequest(BaseModel):
@@ -32,6 +59,7 @@ class PlayerJoinRequest(BaseModel):
 
 class CreateRoomRequest(BaseModel):
     creator_id: str  # 管理员ID
+    name: str = "管理员"  # 管理员名字（也作为玩家参与游戏）
 
 
 class ScriptGenerationRequest(BaseModel):
@@ -91,6 +119,8 @@ class LLMConfigRequest(BaseModel):
 async def create_room(req: CreateRoomRequest):
     game_id = str(uuid.uuid4())
     manager.create_game(game_id, req.creator_id)
+    # Add creator as a regular player (admin also participates in the game)
+    manager.add_player(game_id, req.creator_id, req.name)
     return {"game_id": game_id}
 
 
@@ -99,7 +129,7 @@ async def list_rooms():
     return [
         {
             "game_id": gid,
-            "player_count": sum(1 for pid in state.players if pid != state.room_creator_id),
+            "player_count": len(state.players),
             "phase": state.phase,
             "act": state.act,
             "script_generated": state.script_generated,
@@ -137,6 +167,7 @@ async def get_room(game_id: str):
             "true_killer": state.script.true_killer,
             "roles": [r.model_dump() for r in state.script.roles],
             "roles_count": len(state.script.roles),
+            "plot_outline": state.script.plot_outline.model_dump(),
         } if state.script_generated else None,
         "clues": [c.model_dump() for c in state.script.clues],
         "votes": [v.model_dump() for v in state.votes],
@@ -177,100 +208,7 @@ async def list_players(game_id: str):
 
 # --- Script generation endpoints (admin only) ---
 
-@router.post("/api/rooms/{game_id}/generate-script")
-async def generate_script(game_id: str, req: ScriptGenerationRequest):
-    """触发LLM生成剧本（仅管理员）"""
-    state = manager.get_state(game_id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Room not found")
-    if state.phase != "waiting":
-        raise HTTPException(status_code=400, detail="只能在等待阶段生成剧本")
-
-    # Build detailed prompt for LLM
-    user_prompt = f"""请生成一个完整的剧本杀剧本，以JSON格式返回。
-
-类型：{req.genre}
-难度：{req.difficulty}
-预计时长：{req.estimated_time}分钟
-玩家数量：{req.player_count}人（需要{req.player_count}个角色）
-
-JSON格式要求：
-{{
-  "title": "剧本标题",
-  "genre": "{req.genre}",
-  "difficulty": "{req.difficulty}",
-  "estimated_time": {req.estimated_time},
-  "background_story": "背景故事（200-500字）",
-  "true_killer": "凶手角色名",
-  "murder_method": "作案手法描述",
-  "cover_up": "掩盖手段描述",
-  "roles": [
-    {{
-      "id": "role_1",
-      "name": "角色名",
-      "age": 年龄数字,
-      "occupation": "职业",
-      "description": "简短描述",
-      "background": "个人背景故事（100-200字）",
-      "secret_task": "秘密任务",
-      "alibi": "不在场证明",
-      "motive": "作案动机",
-      "relationships": []
-    }}
-  ],
-  "clues": [
-    {{
-      "id": "clue_1",
-      "title": "线索标题",
-      "content": "线索内容描述",
-      "target_role": null,
-      "is_red_herring": false,
-      "content_hint": "提示"
-    }}
-  ],
-  "plot_outline": {{
-    "act1": "第一幕概述（背景介绍）",
-    "act2": "第二幕概述（自由调查）",
-    "act3": "第三幕概述（审判揭晓）"
-  }}
-}}
-
-注意：
-- 确保有{req.player_count}个角色
-- 每个角色的id必须是唯一的（role_1, role_2...）
-- 线索数量至少5条
-- 凶手必须是其中一个角色"""
-
-    try:
-        raw_json = host_dm.generate_script(
-            "你是一名剧本杀设计师，请生成完整的剧本。只返回JSON，不要其他内容。",
-            user_prompt,
-        )
-        # Parse JSON from LLM response
-        import json
-        # Handle markdown code blocks
-        if "```json" in raw_json:
-            raw_json = raw_json.split("```json")[1].split("```")[0].strip()
-        elif "```" in raw_json:
-            raw_json = raw_json.split("```")[1].split("```")[0].strip()
-
-        script_dict = json.loads(raw_json)
-        script = Script(**script_dict)
-
-        manager.set_script(game_id, script)
-        state.script_generated = True
-
-        return {
-            "status": "generated",
-            "title": script.title,
-            "roles_count": len(script.roles),
-            "clues_count": len(script.clues),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"剧本生成失败: {str(e)}")
-
-
-def _generate_script_stream_generator(game_id: str, req: ScriptGenerationRequest):
+def _generate_script_generator(game_id: str, req: ScriptGenerationRequest):
     """Generator for SSE streaming of script generation."""
     state = manager.get_state(game_id)
     if not state:
@@ -278,7 +216,6 @@ def _generate_script_stream_generator(game_id: str, req: ScriptGenerationRequest
         return
     if state.phase != "waiting":
         yield f"data: {{\"type\": \"error\", \"message\": \"只能在等待阶段生成剧本\"}}\n\n"
-        return
 
     # Build prompt
     user_prompt = f"""请生成一个完整的剧本杀剧本，以JSON格式返回。
@@ -309,7 +246,9 @@ JSON格式要求：
       "secret_task": "秘密任务",
       "alibi": "不在场证明",
       "motive": "作案动机",
-      "relationships": []
+      "relationships": [
+        {{"target": "角色名", "description": "关系描述"}}
+      ]
     }}
   ],
   "clues": [
@@ -319,21 +258,35 @@ JSON格式要求：
       "content": "线索内容描述",
       "target_role": null,
       "is_red_herring": false,
-      "content_hint": "提示"
+      "content_hint": "提示",
+      "target_player_ids": ["角色名"],
+      "unlock_phase": "act2",
+      "trigger_condition": null
     }}
   ],
   "plot_outline": {{
     "act1": "第一幕概述（背景介绍）",
     "act2": "第二幕概述（自由调查）",
     "act3": "第三幕概述（审判揭晓）"
-  }}
+  }},
+  "private_events": [
+    {{
+      "phase": "act2",
+      "target_role_name": "角色名",
+      "content": "DM 私信内容",
+      "trigger": null
+    }}
+  ]
 }}
 
 注意：
 - 确保有{req.player_count}个角色
 - 每个角色的id必须是唯一的（role_1, role_2...）
 - 线索数量至少5条
-- 凶手必须是其中一个角色"""
+- 凶手必须是其中一个角色
+- 每条线索标注 target_player_ids（分配给哪些角色名），unlock_phase（act1/act2/act3）
+- 生成 2-3 个 DM 私信触发点（private_events），分配给不同角色，phase 为 act2
+- target_player_ids 使用角色名（如"角色名"），后端会匹配到对应的玩家"""
 
     try:
         # Send start event
@@ -356,6 +309,7 @@ JSON格式要求：
             raw_json = raw_json.split("```")[1].split("```")[0].strip()
 
         script_dict = json.loads(raw_json)
+        script_dict = _normalize_script_json(script_dict)
         script = Script(**script_dict)
         manager.set_script(game_id, script)
         state.script_generated = True
@@ -365,12 +319,17 @@ JSON格式要求：
         yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
 
 
-@router.post("/api/rooms/{game_id}/generate-script-stream")
-async def generate_script_stream(game_id: str, req: ScriptGenerationRequest):
+@router.post("/api/rooms/{game_id}/generate-script")
+async def generate_script(game_id: str, req: ScriptGenerationRequest):
     """流式生成剧本，通过 SSE 实时返回进度。"""
     return StreamingResponse(
-        _generate_script_stream_generator(game_id, req),
+        _generate_script_generator(game_id, req),
         media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -401,8 +360,8 @@ async def start_game(game_id: str):
     state = manager.get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
-    playable_count = sum(1 for pid in state.players if pid != state.room_creator_id)
-    if playable_count < 2:
+    playable_count = len(state.players)
+    if playable_count < 1:
         raise HTTPException(status_code=400, detail="至少需要2名玩家才能开始")
     if not state.script_generated:
         raise HTTPException(status_code=400, detail="先生成剧本再开始游戏")
@@ -415,6 +374,8 @@ async def start_game(game_id: str):
 @router.post("/api/rooms/{game_id}/dm/push-event")
 async def push_event(game_id: str, req: PushEventRequest):
     """手动推进剧情（仅管理员）"""
+    import logging
+    log = logging.getLogger(__name__)
     state = manager.get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
@@ -422,11 +383,17 @@ async def push_event(game_id: str, req: PushEventRequest):
 
     # Use LLM to generate next event based on current state
     try:
+        log.info(f"[push-event] Generating event for {game_id}, act={state.act}, round={state.current_round}")
         event_content = host_dm.generate_event(state)
+        log.info(f"[push-event] Event generated successfully, length={len(event_content)}")
+        state.current_round += 1
         manager.push_event(game_id, event_content)
         return {"status": "event_pushed", "content": event_content}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"事件生成失败: {str(e)}")
+        log.error(f"[push-event] Event generation failed: {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"事件生成失败: {type(e).__name__}: {str(e)}")
 
 
 @router.post("/api/rooms/{game_id}/dm/add-clue")
