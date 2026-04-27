@@ -255,7 +255,8 @@ class GameManager:
         if game_id not in self.games:
             return None
         state = self.games[game_id]
-        state.phase = new_phase
+        # Phase stays "playing" — act1/act2 are acts within playing phase
+        state.phase = "playing"
         state.act = new_act
 
         role_cards = {}

@@ -371,14 +371,30 @@ async def start_game(game_id: str):
     if not state.script_generated:
         raise HTTPException(status_code=400, detail="先生成剧本再开始游戏")
     manager.start_game(game_id)
-    unlock_result = manager.unlock_phase(game_id, "act1", 1)
+    unlock_result = manager.unlock_phase(game_id, "playing", 1)
     from server.websocket_hub import hub
     if unlock_result:
+        # Phase unlock notification (phase stays "playing", act changes)
         await hub.broadcast(game_id, {
             "type": "phase_unlock",
-            "phase": "act1",
+            "phase": "playing",
             "act": 1,
         })
+
+        # Distribute role card layer 1 (name + description) to all players
+        for pid, player in state.players.items():
+            if player.role:
+                await hub.send_to_player(game_id, pid, {
+                    "type": "role_card",
+                    "layer": "1",
+                    "player_id": pid,
+                    "data": {
+                        "name": player.role.name,
+                        "description": player.role.description,
+                    },
+                })
+
+        # Distribute role card layer 2 (background, secret task, alibi)
         for pid, card_data in unlock_result["role_cards"].items():
             await hub.send_to_player(game_id, pid, {
                 "type": "role_card",
@@ -386,6 +402,8 @@ async def start_game(game_id: str):
                 "player_id": pid,
                 "data": card_data,
             })
+
+        # Distribute clues (list per player — one message per clue)
         for pid, clue_list in unlock_result["clues"].items():
             for clue_data in clue_list:
                 await hub.send_to_player(game_id, pid, {
@@ -393,8 +411,11 @@ async def start_game(game_id: str):
                     "player_id": pid,
                     "clue": clue_data,
                 })
+
+        # Send DM private messages
         for pid, content in unlock_result["private_events"]:
             await hub.send_dm_private(game_id, pid, content)
+
     return {"game_id": game_id, "phase": state.phase}
 
 

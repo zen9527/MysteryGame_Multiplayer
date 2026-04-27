@@ -139,6 +139,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { useGameStore } from '../stores/game';
+import { storeToRefs } from 'pinia';
 import GameTimer from './GameTimer.vue';
 import AdminPanel from './AdminPanel.vue';
 import RoleCard from './RoleCard.vue';
@@ -150,17 +151,19 @@ const gameId = route.params.gameId as string;
 const playerId = localStorage.getItem(`player_${gameId}`) || localStorage.getItem(`admin_${gameId}`) || localStorage.getItem('player_id') || '';
 
 const store = useGameStore();
+const { phase: storePhase, act: storeAct, currentEvent: storeCurrentEvent, activeTab: storeActiveTab, players: storePlayers } = storeToRefs(store);
 
-// Local refs for writable state, synced to store via watchers
+// Local refs synced bidirectionally with store
 const phase = ref<'waiting' | 'playing' | 'trial' | 'revealed' | 'finished'>('playing');
 const act = ref(1);
 const currentEvent = ref('');
-const activeTab = computed(() => store.activeTab);
-const playersMap = computed(() => store.players);
+const activeTab = computed(() => storeActiveTab.value);
+const playersMap = computed(() => storePlayers.value);
 
-watch(phase, (v) => { (store.phase as any).value = v; });
-watch(act, (v) => { (store.act as any).value = v; });
-watch(currentEvent, (v) => { (store.currentEvent as any).value = v; });
+// Store → Local (WS messages update store, watchers sync to local)
+watch(storePhase, (v) => { phase.value = v; });
+watch(storeAct, (v) => { act.value = v; });
+watch(storeCurrentEvent, (v) => { currentEvent.value = v; });
 
 // State local to this component
 const scriptTitle = ref('');
@@ -369,8 +372,6 @@ async function handleForceTrial() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ player_id: playerId }),
     });
-    phase.value = 'trial';
-    act.value = 3;
   } catch (e) { console.error(e); }
 }
 
@@ -382,7 +383,6 @@ async function handleEndGame() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ player_id: playerId }),
     });
-    phase.value = 'revealed';
   } catch (e) { console.error(e); }
 }
 
