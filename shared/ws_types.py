@@ -94,10 +94,18 @@ class DMPrivateMessage(BaseModel):
     content: str
 
 
+class ClueInfo(BaseModel):
+    id: str
+    title: str
+    content: str
+    content_hint: str
+    is_red_herring: bool
+
+
 class ClueUnlockMessage(BaseModel):
     type: str = "clue_unlock"
     player_id: str
-    clue: dict  # 线索数据
+    clue: ClueInfo
 
 
 class PhaseUnlockMessage(BaseModel):
