@@ -200,3 +200,82 @@ def test_add_dm_log(game_manager, sample_script):
     game_manager.add_dm_log("test1", "LLM思考: 玩家已讨论5分钟，该推线索了")
     state = game_manager.get_state("test1")
     assert len(state.dm_log) == 1
+
+
+# --- Distribution method tests ---
+
+def test_distribute_role_card_layer1(game_manager, sample_script):
+    game_manager.create_game("test1", "admin")
+    state = game_manager.get_state("test1")
+    state.script = sample_script
+    game_manager.add_player("test1", "p1", "张三")
+    data = game_manager.distribute_role_card("test1", "p1", "1")
+    assert data is not None
+    assert data["name"] == "角色 A"
+    assert data["description"] == "医生"
+
+
+def test_distribute_role_card_layer2(game_manager, sample_script):
+    game_manager.create_game("test1", "admin")
+    state = game_manager.get_state("test1")
+    state.script = sample_script
+    game_manager.add_player("test1", "p1", "张三")
+    data = game_manager.distribute_role_card("test1", "p1", "2")
+    assert data is not None
+    assert data["secret_task"] == "秘密"
+    assert data["alibi"] == "不在场"
+
+
+def test_distribute_clue_target_player(game_manager, sample_script):
+    from server.models import Clue
+    game_manager.create_game("test1", "admin")
+    state = game_manager.get_state("test1")
+    state.script = sample_script
+    state.script.clues = [
+        Clue(id="c1", title="线索1", content="内容", target_role=None, is_red_herring=False, content_hint="提示",
+             target_player_ids=["角色 A"], unlock_phase="act2"),
+    ]
+    game_manager.add_player("test1", "p1", "张三")
+    game_manager.add_player("test1", "p2", "李四")
+    data = game_manager.distribute_clue("test1", "c1", "p1")
+    assert data is not None
+    assert data["title"] == "线索1"
+    data2 = game_manager.distribute_clue("test1", "c1", "p2")
+    assert data2 is None
+
+
+def test_execute_private_events(game_manager, sample_script):
+    from server.models import PrivateEvent
+    game_manager.create_game("test1", "admin")
+    state = game_manager.get_state("test1")
+    state.script = sample_script
+    state.script.private_events = [
+        PrivateEvent(phase="act2", target_role_name="角色 A", content="私信内容", trigger=None),
+    ]
+    game_manager.add_player("test1", "p1", "张三")
+    results = game_manager.execute_private_events("test1", "act2")
+    assert len(results) == 1
+    assert results[0][0] == "p1"
+    assert results[0][1] == "私信内容"
+
+
+def test_unlock_phase(game_manager, sample_script):
+    from server.models import PrivateEvent, Clue
+    game_manager.create_game("test1", "admin")
+    state = game_manager.get_state("test1")
+    state.script = sample_script
+    state.script.clues = [
+        Clue(id="c1", title="线索1", content="内容", target_role=None, is_red_herring=False, content_hint="提示",
+             target_player_ids=["角色 A"], unlock_phase="act2"),
+    ]
+    state.script.private_events = [
+        PrivateEvent(phase="act2", target_role_name="角色 A", content="私信", trigger=None),
+    ]
+    game_manager.add_player("test1", "p1", "张三")
+    result = game_manager.unlock_phase("test1", "act2", 2)
+    assert result is not None
+    assert "p1" in result["role_cards"]
+    assert "p1" in result["clues"]
+    assert len(result["private_events"]) == 1
+    assert state.phase == "act2"
+    assert state.act == 2
