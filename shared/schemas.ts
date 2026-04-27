@@ -33,6 +33,39 @@ export const advanceSchema = z.object({
   type: z.literal("request_advance"),
 });
 
+// 服务器 → 客户端新类型
+export const roleCardSchema = z.object({
+  type: z.literal("role_card"),
+  layer: z.enum(["1", "2", "3"]),
+  player_id: z.string(),
+  data: z.record(z.string(), z.unknown()),
+});
+
+export const dmPrivateSchema = z.object({
+  type: z.literal("dm_private"),
+  from: z.literal("__dm__"),
+  to: z.string(),
+  content: z.string(),
+});
+
+export const clueUnlockSchema = z.object({
+  type: z.literal("clue_unlock"),
+  player_id: z.string(),
+  clue: z.object({
+    id: z.string(),
+    title: z.string(),
+    content: z.string(),
+    content_hint: z.string(),
+    is_red_herring: z.boolean(),
+  }),
+});
+
+export const phaseUnlockSchema = z.object({
+  type: z.literal("phase_unlock"),
+  phase: z.string(),
+  act: z.number(),
+});
+
 // 服务器 → 客户端类型
 export type WSMessage =
   | { type: "system"; content: string }

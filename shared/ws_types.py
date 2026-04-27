@@ -78,3 +78,29 @@ class RevealMessage(BaseModel):
 class GameOverMessage(BaseModel):
     type: str = "game_over"
     result: str  # correct/wrong/time_out
+
+
+class RoleCardMessage(BaseModel):
+    type: str = "role_card"
+    layer: str  # "1", "2", "3"
+    player_id: str
+    data: dict  # 角色卡数据
+
+
+class DMPrivateMessage(BaseModel):
+    type: str = "dm_private"
+    from_player: str = "__dm__"
+    to_player: str
+    content: str
+
+
+class ClueUnlockMessage(BaseModel):
+    type: str = "clue_unlock"
+    player_id: str
+    clue: dict  # 线索数据
+
+
+class PhaseUnlockMessage(BaseModel):
+    type: str = "phase_unlock"
+    phase: str
+    act: int
