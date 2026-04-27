@@ -41,4 +41,4 @@ echo ========================================
 echo   Servers stopped
 echo ========================================
 echo.
-start "" cmd /c "timeout /t 2 ^&^& exit"
+pause

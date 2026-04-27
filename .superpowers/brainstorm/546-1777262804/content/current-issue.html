@@ -1,0 +1,87 @@
+<h2>🎭 当前界面 — 所有信息公开展示</h2>
+<p class="subtitle">这就是导致游戏无法正常进行的问题所在</p>
+
+<div class="mockup">
+  <div class="mockup-header">当前 GamePage 布局</div>
+  <div class="mockup-body">
+    <div style="background:rgba(0,0,0,0.4);border-radius:8px;padding:12px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span style="color:#eee;font-size:14px;">🎭 剧本杀</span>
+        <span style="background:#e94560;padding:2px 10px;border-radius:10px;font-size:11px;color:#fff;">游戏中 (第1幕)</span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;height:340px;">
+      <!-- Left: Main Panel -->
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+        <!-- DM Event (PUBLIC to ALL) -->
+        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:12px;">
+          <div style="color:#aaa;font-size:12px;margin-bottom:8px;">📜 当前事件（所有人可见）</div>
+          <div style="background:rgba(0,0,0,0.2);padding:10px;border-radius:4px;color:#ddd;font-size:13px;line-height:1.6;">
+            <span style="color:#e94560;font-weight:bold;">🎭 DM：</span>
+            深夜，别墅内传来一声尖叫。众人发现张老板倒在书房中，胸口插着一把匕首...<br><br>
+            <span style="color:#e94560;font-weight:bold;">🎭 DM：</span>
+            作为凶手，你成功完成了谋杀，现在需要与其他玩家一起"调查"真相。
+          </div>
+        </div>
+
+        <!-- Chat (PUBLIC to ALL) -->
+        <div style="flex:1;background:rgba(255,255,255,0.05);border-radius:6px;padding:12px;display:flex;flex-direction:column;">
+          <div style="color:#aaa;font-size:12px;margin-bottom:8px;">💬 聊天（所有人可见）</div>
+          <div style="flex:1;overflow-y:auto;font-size:12px;">
+            <div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span style="color:#e94560;font-weight:bold;">🎭 DM</span> 发现尸体...</div>
+            <div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span style="color:#e94560;font-weight:bold;">🎭 DM</span> 凶手身份已公布...</div>
+            <div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span style="color:#3498db;font-weight:bold;">小明</span> 我觉得是小红干的</div>
+            <div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span style="color:#e94560;font-weight:bold;">🎭 DM</span> 🔍 新线索：凶器上只有小红的指纹</div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px;">
+            <input class="mock-input" placeholder="输入消息..." style="flex:1;" />
+            <button class="mock-button" style="padding:6px 16px;">发送</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Side Panel -->
+      <div style="width:280px;display:flex;flex-direction:column;gap:8px;">
+        <!-- Players (ROLES VISIBLE TO ALL!) -->
+        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:12px;">
+          <div style="color:#aaa;font-size:12px;margin-bottom:8px;">👥 玩家列表</div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">
+            <span>小明</span>
+            <span style="color:#e94560;">🕵️ 侦探</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">
+            <span>小红</span>
+            <span style="color:#e94560;">🔪 凶手</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">
+            <span>小刚</span>
+            <span style="color:#e94560;">👤 嫌疑人</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;">
+            <span>小丽</span>
+            <span style="color:#e94560;">👤 嫌疑人</span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:12px;">
+          <div style="color:#aaa;font-size:12px;margin-bottom:8px;">⚡ 操作</div>
+          <button class="mock-button" style="width:100%;margin-bottom:6px;padding:8px;">请求线索</button>
+          <button class="mock-button" style="width:100%;margin-bottom:6px;padding:8px;">开始指控</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <h3>❌ 问题清单</h3>
+  <ul>
+    <li><strong>角色全部公开</strong> — 凶手、侦探身份所有人都能看到，游戏直接结束</li>
+    <li><strong>DM私信暴露</strong> — DM对凶手的指导所有人可见（"凶手身份已公布"）</li>
+    <li><strong>没有角色卡</strong> — 玩家无法查看自己的秘密任务、不在场证明、个人线索</li>
+    <li><strong>线索无区分</strong> — 个人线索和公共线索混在一起</li>
+    <li><strong>私聊功能简陋</strong> — 只有玩家间私聊，没有DM→玩家私信通道</li>
+  </ul>
+</div>

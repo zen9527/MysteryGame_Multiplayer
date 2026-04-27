@@ -58,6 +58,8 @@ class LLMClient:
 
     def _build_request(self, messages: list, temperature: float = 0.7, timeout: int = 120) -> dict:
         """Build and send an OpenAI-compatible chat request. Returns parsed response dict."""
+        import logging
+        log = logging.getLogger(__name__)
         url = self._chat_url()
         headers = {
             "Content-Type": "application/json",
@@ -68,8 +70,12 @@ class LLMClient:
             "messages": messages,
             "temperature": temperature,
         }
+        log.info(f"[LLM] POST {url}, model='{self.model}', msg_count={len(messages)}, temp={temperature}")
         response = requests.post(url, headers=headers, json=payload, timeout=timeout)
-        response.raise_for_status()
+        if response.status_code != 200:
+            body = response.text[:1000]
+            log.error(f"[LLM] HTTP {response.status_code} response: {body}")
+            raise ValueError(f"LLM API {response.status_code}: {body}")
         data = response.json()
         if not data.get("choices"):
             raw = json.dumps(data, ensure_ascii=False)[:500]
@@ -100,7 +106,7 @@ class LLMClient:
             "temperature": 0.7,
             "stream": True,
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=300, stream=True)
+        response = requests.post(url, headers=headers, json=payload, timeout=None, stream=True)
         response.raise_for_status()
         for line in response.iter_lines():
             if line:
@@ -120,8 +126,12 @@ class LLMClient:
     def host_event(self, system_prompt: str, message_history: list[str]) -> str:
         """LLM 主持人发布事件"""
         messages = [{"role": "system", "content": system_prompt}]
-        messages.extend([{"role": "assistant", "content": msg} for msg in message_history])
-        resp = self._build_request(messages, temperature=0.8, timeout=120)
+        # Previous events are assistant messages, last item is the current user query
+        for msg in message_history[:-1]:
+            messages.append({"role": "assistant", "content": msg})
+        if message_history:
+            messages.append({"role": "user", "content": message_history[-1]})
+        resp = self._build_request(messages, temperature=0.8, timeout=300)
         return resp["choices"][0]["message"]["content"]
 
     def test_connection(self) -> str:

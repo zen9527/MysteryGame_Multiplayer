@@ -1,0 +1,92 @@
+<h2>🎭 新界面 — 阶段自动解锁 + 角色卡随时翻阅</h2>
+<p class="subtitle">每个玩家看到的信息被严格隔离</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">左侧：公共信息区（阶段自动解锁）</div>
+    <div class="mockup-body">
+      <div style="background:rgba(0,0,0,0.4);border-radius:8px;padding:10px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:#eee;font-size:13px;">🎭 剧本杀</span>
+          <span style="background:#e94560;padding:2px 10px;border-radius:10px;font-size:11px;color:#fff;">游戏中 (第1幕)</span>
+        </div>
+      </div>
+
+      <!-- DM Events (PUBLIC) -->
+      <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:12px;margin-bottom:8px;">
+        <div style="color:#aaa;font-size:12px;margin-bottom:8px;">📜 公共事件</div>
+        <div style="background:rgba(0,0,0,0.2);padding:10px;border-radius:4px;color:#ddd;font-size:13px;line-height:1.6;">
+          <span style="color:#e94560;font-weight:bold;">🎭 DM：</span>
+          深夜，别墅内传来一声尖叫。众人发现张老板倒在书房中...
+        </div>
+      </div>
+
+      <!-- Public Chat -->
+      <div style="flex:1;background:rgba(255,255,255,0.05);border-radius:6px;padding:12px;display:flex;flex-direction:column;">
+        <div style="color:#aaa;font-size:12px;margin-bottom:8px;">💬 公共聊天</div>
+        <div style="flex:1;overflow-y:auto;font-size:12px;">
+          <div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span style="color:#3498db;font-weight:bold;">小明</span> 我觉得是小红干的</div>
+          <div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span style="color:#2ecc71;font-weight:bold;">小刚</span> 我在客厅，没听到声音</div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <input class="mock-input" placeholder="输入公共消息..." style="flex:1;" />
+          <button class="mock-button" style="padding:6px 16px;">发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">右侧：私人信息区（角色卡 + 私信）</div>
+    <div class="mockup-body">
+      <!-- Tab Navigation -->
+      <div style="display:flex;gap:4px;margin-bottom:8px;">
+        <button class="mock-button" style="flex:1;padding:6px;background:#e94560;color:#fff;">📋 角色卡</button>
+        <button class="mock-button" style="flex:1;padding:6px;background:rgba(0,0,0,0.3);color:#aaa;">💌 私信</button>
+        <button class="mock-button" style="flex:1;padding:6px;background:rgba(0,0,0,0.3);color:#aaa;">🔍 线索</button>
+      </div>
+
+      <!-- Role Card (PRIVATE) -->
+      <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:12px;margin-bottom:8px;">
+        <div style="color:#e94560;font-size:16px;font-weight:bold;margin-bottom:4px;">🕵️ 侦探 — 小明</div>
+        <div style="color:#aaa;font-size:11px;margin-bottom:8px;">你的身份：找出真凶</div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;">
+          <div style="color:#aaa;font-size:11px;margin-bottom:4px;">秘密任务</div>
+          <div style="color:#ddd;font-size:13px;">在其他人之前找到凶手，你有额外的调查权限</div>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;">
+          <div style="color:#aaa;font-size:11px;margin-bottom:4px;">不在场证明</div>
+          <div style="color:#ddd;font-size:13px;">案发时你在客厅喝茶，有证人</div>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;">
+          <div style="color:#aaa;font-size:11px;margin-bottom:4px;">人际关系</div>
+          <div style="color:#ddd;font-size:13px;">与小红是同事，与张老板有商业纠纷</div>
+        </div>
+      </div>
+
+      <!-- Private Chat (DM→Player) -->
+      <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:12px;">
+        <div style="color:#aaa;font-size:12px;margin-bottom:8px;">💌 私信（仅你和DM可见）</div>
+        <div style="background:rgba(0,0,0,0.2);padding:10px;border-radius:4px;color:#ddd;font-size:13px;line-height:1.6;">
+          <span style="color:#e94560;font-weight:bold;">🎭 DM：</span>
+          侦探小明，你可以额外查看一个房间。请选择：书房、卧室或车库。
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <input class="mock-input" placeholder="回复DM..." style="flex:1;" />
+          <button class="mock-button" style="padding:6px 16px;">发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <h3>✅ 信息隔离规则</h3>
+  <ul>
+    <li><strong>角色卡</strong> — 每个玩家只能看到自己的角色信息，别人的角色名称和身份对其他人隐藏</li>
+    <li><strong>DM私信</strong> — DM→玩家的私信只有发送者和接收者可见，不广播给其他人</li>
+    <li><strong>个人线索</strong> — 分配给特定玩家的线索只有该玩家能看到</li>
+    <li><strong>公共事件/聊天</strong> — 所有玩家都能看到，按阶段自动解锁</li>
+    <li><strong>玩家间私聊</strong> — 仅两个玩家之间可见</li>
+  </ul>
+</div>

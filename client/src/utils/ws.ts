@@ -5,9 +5,9 @@ export class WebSocketManager {
   private url: string;
   private onMessage: ((msg: WSMessage) => void) | null = null;
 
-  constructor(roomId: string) {
+  constructor(roomId: string, playerId: string) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.url = `${protocol}//${window.location.host}/ws/${roomId}`;
+    this.url = `${protocol}//${window.location.host}/ws/${roomId}/${playerId}`;
   }
 
   connect(onMessage: (msg: WSMessage) => void) {

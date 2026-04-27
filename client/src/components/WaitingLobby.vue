@@ -78,6 +78,9 @@
         <label>预计时长（分钟）</label>
         <input type="number" v-model.number="estimatedTime" min="30" max="180" />
 
+        <label>玩家人数</label>
+        <input type="number" v-model.number="playerCountTarget" min="2" max="10" />
+
         <button @click="generateScript" :disabled="generating || !isAdmin" class="generate-btn">
           {{ generating ? '🤖 生成中...' : '🎲 生成剧本' }}
         </button>
@@ -107,6 +110,7 @@
       <div v-for="(player, pid) in players" :key="pid" class="player-card">
         <span class="player-name">{{ player.name }}</span>
         <span v-if="player.role_name" class="role-badge">{{ player.role_name }}</span>
+        <span v-if="pid === adminId" class="admin-badge">👑</span>
         <button v-if="isAdmin && pid !== adminId" @click="kickPlayer(pid)" class="kick-btn">踢出</button>
       </div>
       <p class="count">{{ playerCount }} 玩家</p>
@@ -150,6 +154,7 @@ const difficulties = ref<string[]>(['简单', '中等', '困难']);
 const selectedGenre = ref('悬疑推理');
 const selectedDifficulty = ref('中等');
 const estimatedTime = ref(90);
+const playerCountTarget = ref(4);
 
 // Script generation
 const generating = ref(false);
@@ -314,14 +319,14 @@ async function generateScript() {
   genProgress.value = 0;
   genError.value = '';
   try {
-    const res = await fetch(`/api/rooms/${gameId}/generate-script-stream`, {
+    const res = await fetch(`/api/rooms/${gameId}/generate-script`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         genre: selectedGenre.value,
         difficulty: selectedDifficulty.value,
         estimated_time: estimatedTime.value,
-        player_count: Math.max(estimatedTime.value > 60 ? 6 : 4, playerCount.value),
+        player_count: playerCountTarget.value,
       }),
     });
     if (!res.ok) {
@@ -329,7 +334,7 @@ async function generateScript() {
       throw new Error(data.detail || '生成失败');
     }
     // Read SSE stream
-    const reader = res.body.getReader();
+    const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let chunkCount = 0;
@@ -633,6 +638,7 @@ h1 { text-align: center; color: #eee; }
   border-radius: 6px; margin-bottom: 8px;
 }
 .player-name { font-size: 15px; }
+.admin-badge { font-size: 12px; color: #f39c12; font-weight: bold; }
 .role-badge { font-size: 12px; color: #e94560; }
 .kick-btn {
   padding: 4px 10px; border: none; border-radius: 4px;

@@ -31,7 +31,7 @@ npm install
 ```ini
 LLM_ENDPOINT=http://192.168.1.107:12340
 LLM_API_KEY=your_api_key_here
-LLM_MODEL=qwen3.5-122b-a10b
+LLM_MODEL=qwen/qwen3.6-35b-a3b
 ```
 
 ### 3. 启动
@@ -103,4 +103,4 @@ npm test
 ---
 
 **作者**: Flex  
-**版本**: v3.0.0
+**版本**: v4.0.0
