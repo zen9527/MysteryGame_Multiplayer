@@ -92,19 +92,6 @@ class WebSocketHub:
             if target and target != player_id:
                 await self.send_to_player(room_id, target, chat_msg)
 
-        elif msg_type == "dm_private":
-            # DM → player private message (from API, not client)
-            target = data.get("to_player_id", "")
-            content = data.get("content", "")
-            if target:
-                dm_msg = {
-                    "type": "dm_private",
-                    "from": "__dm__",
-                    "to": target,
-                    "content": content,
-                }
-                await self.send_to_player(room_id, target, dm_msg)
-
         elif msg_type == "accuse":
             # Broadcast accusation to all players
             await self.broadcast(room_id, {
