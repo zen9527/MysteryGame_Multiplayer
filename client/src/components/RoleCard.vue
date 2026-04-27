@@ -45,7 +45,7 @@
         </div>
         <div v-show="expandedSections.relationships" class="section-body">
           <ul v-if="layer3.relationships?.length">
-            <li v-for="(rel, i) in layer3.relationships" :key="i">
+            <li v-for="rel in layer3.relationships" :key="rel.target">
               <strong>{{ rel.target }}</strong>: {{ rel.description }}
             </li>
           </ul>

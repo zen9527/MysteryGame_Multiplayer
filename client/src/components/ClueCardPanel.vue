@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useGameStore } from '../stores/game';
 
 const store = useGameStore();
@@ -33,11 +33,25 @@ const store = useGameStore();
 const clues = computed(() => store.clues);
 const hasClues = computed(() => clues.value.length > 0);
 
-const clueArray = computed(() => {
-  return Array.from(clues.value).map(c => ({ ...c, new: false }));
-});
-
+const newClueIds = ref<Set<string>>(new Set());
 const expandedClues = ref<Record<string, boolean>>({});
+
+// Track newly unlocked clues
+watch(clues, (newClues) => {
+  const ids = newClues.map(c => c.id);
+  newClueIds.value = new Set(ids);
+  // Clear "new" flag after 3 seconds
+  setTimeout(() => {
+    newClueIds.value.clear();
+  }, 3000);
+}, { immediate: true });
+
+const clueArray = computed(() => {
+  return Array.from(clues.value).map(c => ({
+    ...c,
+    new: newClueIds.value.has(c.id),
+  }));
+});
 
 function toggleClue(clueId: string) {
   expandedClues.value[clueId] = !expandedClues.value[clueId];
