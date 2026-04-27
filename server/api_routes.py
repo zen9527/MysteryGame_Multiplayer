@@ -371,6 +371,30 @@ async def start_game(game_id: str):
     if not state.script_generated:
         raise HTTPException(status_code=400, detail="先生成剧本再开始游戏")
     manager.start_game(game_id)
+    unlock_result = manager.unlock_phase(game_id, "act1", 1)
+    from server.websocket_hub import hub
+    if unlock_result:
+        await hub.broadcast(game_id, {
+            "type": "phase_unlock",
+            "phase": "act1",
+            "act": 1,
+        })
+        for pid, card_data in unlock_result["role_cards"].items():
+            await hub.send_to_player(game_id, pid, {
+                "type": "role_card",
+                "layer": "2",
+                "player_id": pid,
+                "data": card_data,
+            })
+        for pid, clue_list in unlock_result["clues"].items():
+            for clue_data in clue_list:
+                await hub.send_to_player(game_id, pid, {
+                    "type": "clue_unlock",
+                    "player_id": pid,
+                    "clue": clue_data,
+                })
+        for pid, content in unlock_result["private_events"]:
+            await hub.send_dm_private(game_id, pid, content)
     return {"game_id": game_id, "phase": state.phase}
 
 
