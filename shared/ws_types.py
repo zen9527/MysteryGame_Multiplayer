@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 
 
@@ -89,9 +89,11 @@ class RoleCardMessage(BaseModel):
 
 class DMPrivateMessage(BaseModel):
     type: str = "dm_private"
-    from_player: str = "__dm__"
-    to_player: str
+    from_: str = Field(default="__dm__", alias="from")
+    to: str
     content: str
+
+    model_config = {"populate_by_name": True}
 
 
 class ClueInfo(BaseModel):

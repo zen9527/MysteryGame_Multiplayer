@@ -11,7 +11,11 @@ export type WSMessage =
   | { type: "game_over"; result: "correct" | "wrong" | "time_out" }
   | { type: "player_joined"; player_name: string; role_name: string }
   | { type: "player_left"; player_name: string }
-  | { type: "role_assigned"; role: object; secret: object };
+  | { type: "role_assigned"; role: object; secret: object }
+  | { type: "role_card"; layer: "1" | "2" | "3"; player_id: string; data: Record<string, unknown> }
+  | { type: "dm_private"; from: "__dm__"; to: string; content: string }
+  | { type: "clue_unlock"; player_id: string; clue: { id: string; title: string; content: string; content_hint: string; is_red_herring: boolean } }
+  | { type: "phase_unlock"; phase: string; act: number };
 
 export type ClientMessage =
   | { type: "join"; player_name: string }
