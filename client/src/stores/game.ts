@@ -20,11 +20,14 @@ export interface ClueData {
   is_red_herring: boolean;
 }
 
+const VALID_PHASES = ['waiting', 'playing', 'trial', 'revealed', 'finished'] as const;
+type ValidPhase = (typeof VALID_PHASES)[number];
+
 export const useGameStore = defineStore('game', () => {
-  const phase = ref<'waiting' | 'playing' | 'trial' | 'revealed' | 'finished'>('waiting');
+  const phase = ref<ValidPhase>('waiting');
   const act = ref(1);
   const messages = ref<WSMessage[]>([]);
-  const players = ref<Map<string, { name: string; role_id: string }>>(new Map());
+  const players = ref<Array<{ name: string; role_id: string }>>([]);
   const currentEvent = ref<string>('');
 
   // New state for private information
@@ -34,7 +37,7 @@ export const useGameStore = defineStore('game', () => {
     layer3: null,
   });
   const privateMessages = ref<Array<{ from: string; content: string; timestamp: string }>>([]);
-  const clues = ref<Map<string, ClueData>>(new Map());
+  const clues = ref<Array<ClueData>>([]);
   const activeTab = ref<'role' | 'private' | 'clue' | 'action'>('role');
 
   function handleWSMessage(msg: WSMessage) {
@@ -46,7 +49,10 @@ export const useGameStore = defineStore('game', () => {
         currentEvent.value = msg.content;
         break;
       case 'player_joined':
-        players.value.set(msg.player_name, { name: msg.player_name, role_id: '' });
+        // Add to players array if not already present
+        if (!players.value.some(p => p.name === msg.player_name)) {
+          players.value.push({ name: msg.player_name, role_id: '' });
+        }
         break;
       case 'role_assigned':
         // Legacy — handled by role_card messages now
@@ -57,7 +63,7 @@ export const useGameStore = defineStore('game', () => {
       case 'private_chat':
         // Player private chat — add to privateMessages
         privateMessages.value.push({
-          from: msg.from === 'playerId' ? '我' : msg.from,
+          from: msg.from,
           content: msg.content,
           timestamp: msg.timestamp || '',
         });
@@ -71,18 +77,25 @@ export const useGameStore = defineStore('game', () => {
         break;
       case 'dm_private':
         // DM → player private message
-        if (msg.to === 'playerId') {
-          privateMessages.value.push({
-            from: '🎭 DM',
-            content: msg.content,
-            timestamp: '',
-          });
-        }
+        privateMessages.value.push({
+          from: '🎭 DM',
+          content: msg.content,
+          timestamp: '',
+        });
         break;
       case 'clue_unlock':
         // Clue unlocked for this player
         const clue = msg.clue as ClueData;
-        clues.value.set(clue.id, clue);
+        clues.value.push(clue);
+        break;
+      case 'clue_reveal':
+        // Clue reveal — add to public messages if public, private if not
+        if (msg.public) {
+          currentEvent.value = `🔍 新线索（公开）：${(msg.clue as any).title} — ${(msg.clue as any).content}`;
+        }
+        break;
+      case 'accusation':
+        // Accusation — already in messages
         break;
       case 'trial_start':
         phase.value = 'trial';
@@ -98,11 +111,13 @@ export const useGameStore = defineStore('game', () => {
         phase.value = 'finished';
         break;
       case 'phase_unlock':
-        phase.value = msg.phase as typeof phase.value;
-        act.value = msg.act;
+        if (VALID_PHASES.includes(msg.phase as ValidPhase)) {
+          phase.value = msg.phase as ValidPhase;
+          act.value = msg.act;
+        }
         break;
       case 'player_left':
-        players.value.delete(msg.player_name);
+        players.value = players.value.filter(p => p.name !== msg.player_name);
         break;
     }
   }
