@@ -1,5 +1,7 @@
 import json
 import logging
+from typing import Generator, Tuple
+
 from server.llm_client import LLMClient
 from server.models import GameState
 
@@ -138,14 +140,19 @@ class HostDM:
 - 回复长度控制在 50-200 字
 - 只回复纯文本，不要JSON格式"""
 
-    def respond_to_chat(self, game_state: GameState, player_id: str, player_message: str) -> str:
-        """Generate a DM response to a player's private message. Returns plain text."""
+    def _build_chat_prompt(self, game_state: GameState, player_id: str, player_message: str) -> Tuple[str, str]:
+        """Build system and user prompts for DM chat response. Returns (system_prompt, user_prompt)."""
         player = game_state.players.get(player_id)
         role_name = player.role.name if player and player.role else "未分配"
 
         chat_summary = []
         for msg in game_state.private_messages[-10:]:
-            sender = "🎭 DM" if msg.from_player_id == "__dm__" else msg.from_player_id
+            if msg.from_player_id == "__dm__":
+                sender = "🎭 DM"
+            elif msg.from_player_id in game_state.players:
+                sender = game_state.players[msg.from_player_id].name
+            else:
+                sender = msg.from_player_id
             chat_summary.append(f"{sender}: {msg.content}")
 
         user_input = f"""你正在与一名玩家私信对话。
@@ -157,31 +164,22 @@ class HostDM:
 
 请给玩家一个符合DM身份的回复。"""
 
+        return self.DM_CHAT_SYSTEM_PROMPT, user_input
+
+    def respond_to_chat(self, game_state: GameState, player_id: str, player_message: str) -> str:
+        """Generate a DM response to a player's private message. Returns plain text."""
+        system_prompt, user_input = self._build_chat_prompt(game_state, player_id, player_message)
+
         full_reply = ""
-        for chunk in self.llm.chat_stream(self.DM_CHAT_SYSTEM_PROMPT, user_input):
+        for chunk in self.llm.chat_stream(system_prompt, user_input):
             full_reply += chunk
         return full_reply
 
-    def respond_to_chat_stream(self, game_state: GameState, player_id: str, player_message: str):
+    def respond_to_chat_stream(self, game_state: GameState, player_id: str, player_message: str) -> Generator[str, None, None]:
         """Stream a DM response to a player's private message. Yields content chunks."""
-        player = game_state.players.get(player_id)
-        role_name = player.role.name if player and player.role else "未分配"
+        system_prompt, user_input = self._build_chat_prompt(game_state, player_id, player_message)
 
-        chat_summary = []
-        for msg in game_state.private_messages[-10:]:
-            sender = "🎭 DM" if msg.from_player_id == "__dm__" else msg.from_player_id
-            chat_summary.append(f"{sender}: {msg.content}")
-
-        user_input = f"""你正在与一名玩家私信对话。
-当前是第{game_state.current_round}轮，第{game_state.act}幕。
-玩家角色：{role_name}
-玩家消息：{player_message}
-私信历史：
-{''.join(chat_summary) if chat_summary else '暂无私信记录'}
-
-请给玩家一个符合DM身份的回复。"""
-
-        yield from self.llm.chat_stream(self.DM_CHAT_SYSTEM_PROMPT, user_input)
+        yield from self.llm.chat_stream(system_prompt, user_input)
 
 
 host = HostDM()
