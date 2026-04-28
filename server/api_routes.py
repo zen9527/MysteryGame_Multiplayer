@@ -624,7 +624,8 @@ async def chat_response(game_id: str, req: ChatResponseRequest):
     state = manager.get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
-    require_admin(req.player_id, game_id)
+    if req.player_id not in state.players:
+        raise HTTPException(status_code=403, detail="Player not in room")
 
     manager.add_chat_message(game_id, req.player_id, req.content, is_private=True, target_player_id="__dm__")
 
