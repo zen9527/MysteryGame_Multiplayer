@@ -135,6 +135,27 @@
       <p>分享房间号给好友：</p>
       <input :value="gameId" readonly @click="selectRoomId" ref="roomInput" />
     </div>
+
+    <!-- Game instructions (shown to all players while waiting) -->
+    <div class="instructions-section">
+      <h2>📖 游戏玩法</h2>
+      <div class="instructions-content">
+        <p><strong>1. 等待阶段：</strong>管理员生成剧本后，所有玩家将获得角色卡。</p>
+        <p><strong>2. 开始游戏：</strong>管理员点击"开始游戏"，进入第一幕（背景介绍）。</p>
+        <p><strong>3. 游戏进行：</strong>
+          - 查看自己的角色卡（私信标签页）
+          - 与其他玩家在公共聊天中讨论
+          - 向DM提问获取线索（私信对话框）
+          - 或点击"请求线索"让DM推进剧情
+        </p>
+        <p><strong>4. 指控与投票：</strong>
+          - 游戏进行中可随时指控凶手（操作标签页）
+          - 进入审判阶段后，全体玩家投票决定凶手
+          - ≥50%玩家同意同一目标则达成共识
+        </p>
+        <p><strong>5. 真相揭晓：</strong>投票达成共识或管理员提前结束时，DM将揭晓真相。</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -689,4 +710,20 @@ h1 { text-align: center; color: #eee; }
 }
 
 .error { color: #e94560; margin-top: 8px; }
+
+.instructions-section {
+  background: rgba(41, 128, 185, 0.1);
+  border: 1px solid rgba(41, 128, 185, 0.3);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 24px;
+}
+.instructions-section h2 { color: #3498db; font-size: 16px; margin-bottom: 12px; }
+.instructions-content p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #ddd;
+  margin: 8px 0;
+}
+.instructions-content strong { color: #e94560; }
 </style>

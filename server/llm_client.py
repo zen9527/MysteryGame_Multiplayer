@@ -98,7 +98,7 @@ class LLMClient:
             "temperature": temperature,
             "stream": True,
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=300, stream=True)
+        response = requests.post(url, headers=headers, json=payload, timeout=None, stream=True)
         response.raise_for_status()
         for line in response.iter_lines():
             if line:
