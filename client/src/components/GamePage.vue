@@ -326,30 +326,61 @@ async function submitVote() {
 // Admin actions
 async function handlePushEvent() {
   adminLoading.value = true;
+  currentEvent.value = '';
   try {
-    // LLM can take up to 300s — use AbortController with generous timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 310000);
-
     const res = await fetch(`/api/rooms/${gameId}/dm/push-event`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player_id: playerId, event_content: '' }),
-      signal: controller.signal,
+      body: JSON.stringify({ player_id: playerId }),
     });
-    clearTimeout(timeoutId);
 
-    if (res.ok) {
-      const data = await res.json();
-      currentEvent.value = data.content;
-    } else {
+    if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error('推进剧情失败:', err.detail || '未知错误');
+      return;
+    }
+
+    // Consume SSE stream — same pattern as WaitingLobby.vue generateScript
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            switch (data.type) {
+              case 'start':
+                console.log('[push-event] LLM starting...');
+                break;
+              case 'chunk':
+                console.log('[push-event] Token chunk received');
+                break;
+              case 'done':
+                currentEvent.value = data.public_event || '';
+                console.log(`[push-event] Done: ${data.private_clues_count} private clues`);
+                break;
+              case 'error':
+                console.error('[push-event] Error:', data.message);
+                break;
+            }
+          } catch { /* skip malformed SSE */ }
+        }
+      }
     }
   } catch (e) {
-    // Request timeout or network error — event will still arrive via WS
-    console.warn('推进剧情请求超时/失败（事件将通过WS推送）:', e);
-  } finally { adminLoading.value = false; }
+    console.warn('推进剧情请求失败:', e);
+  } finally {
+    adminLoading.value = false;
+  }
 }
 
 async function handleAddClue(clue: { title: string; content: string }) {
