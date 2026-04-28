@@ -211,15 +211,20 @@ const voteTarget = ref('');
 const voteReasoning = ref('');
 
 // Admin loading state
-const adminLoading = ref(false);
+const adminLoadingBase = ref(false);
 
 // Player action loading state
-  const requestingClue = ref(false);
-  const submittingAccusation = ref(false);
-  const submittingVote = ref(false);
-  const addingClue = ref(false);
-  const advancingAct = ref(false);
-  const forcingTrial = ref(false);
+const requestingClue = ref(false);
+const submittingAccusation = ref(false);
+const submittingVote = ref(false);
+const addingClue = ref(false);
+const advancingAct = ref(false);
+const forcingTrial = ref(false);
+
+// Combined admin loading — any admin action disables all admin buttons
+const adminLoading = computed(() =>
+  adminLoadingBase.value || advancingAct.value || addingClue.value || forcingTrial.value
+);
 
 // WebSocket
 let ws: WebSocket | null = null;
@@ -387,7 +392,7 @@ async function requestClue() {
 
 // Admin actions
 async function handlePushEvent() {
-  adminLoading.value = true;
+  adminLoadingBase.value = true;
   currentEvent.value = '';
   try {
     const res = await fetch(`/api/rooms/${gameId}/dm/push-event`, {
@@ -448,7 +453,7 @@ async function handlePushEvent() {
   } catch (e) {
     console.warn('推进剧情请求失败:', e);
   } finally {
-    adminLoading.value = false;
+    adminLoadingBase.value = false;
   }
 }
 
@@ -519,7 +524,7 @@ async function handlePushEvent() {
 
   async function handleEndGame() {
     if (!confirm('确定要提前结束游戏并揭晓真相吗？')) return;
-    adminLoading.value = true;
+    adminLoadingBase.value = true;
     try {
       const res = await fetch(`/api/rooms/${gameId}/end-game`, {
         method: 'POST',
@@ -574,7 +579,7 @@ async function handlePushEvent() {
       console.error('结束游戏失败:', e);
       alert('结束游戏失败: 网络错误');
     } finally {
-      adminLoading.value = false;
+      adminLoadingBase.value = false;
     }
   }
 
