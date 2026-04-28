@@ -114,3 +114,4 @@ class GameState(BaseModel):
     distributed_role_cards: dict[str, List[dict]] = Field(default_factory=dict)  # pid -> [{type, layer, data}, ...]
     distributed_clues: dict[str, List[dict]] = Field(default_factory=dict)  # pid -> [{type, clue}, ...]
     distributed_dm_private: dict[str, List[dict]] = Field(default_factory=dict)  # pid -> [{type, from, to, content}, ...]
+    dm_chat_cooldowns: dict[str, datetime] = Field(default_factory=dict)  # player_id -> last chat time

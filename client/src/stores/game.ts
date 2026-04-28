@@ -53,6 +53,9 @@ export const useGameStore = defineStore('game', () => {
   // Track which messages we've already seen (by content+from+timestamp) to prevent duplicates
   const seenMessageKeys = ref<Set<string>>(new Set());
 
+  // Track which private messages we've already seen (by from+content) to prevent duplicates
+  const seenPrivateKeys = ref<Set<string>>(new Set());
+
   function _addPublicMessage(from: string, content: string, timestamp: string, isEvent = false) {
     // Key without timestamp — WS messages have timestamp="" while API messages have real timestamps
     // Same message from same sender must deduplicate regardless of source
@@ -73,7 +76,11 @@ export const useGameStore = defineStore('game', () => {
         _addPublicMessage('🎭 DM', msg.content, '', true);
         break;
       case 'player_joined':
-        if (!Array.from(players.value.values()).some(p => p.name === msg.player_name)) {
+        // Server doesn't broadcast player_joined — this is dead code but kept for safety
+        // Use player_id as key if available (server identifies players by UUID)
+        if (msg.player_id && !players.value.has(msg.player_id)) {
+          players.value.set(msg.player_id, { name: msg.player_name, role_id: '' });
+        } else if (msg.player_name && !players.value.has(msg.player_name)) {
           players.value.set(msg.player_name, { name: msg.player_name, role_id: '' });
         }
         break;
@@ -97,13 +104,17 @@ export const useGameStore = defineStore('game', () => {
         else if (layer === '3') roleCard.value.layer3 = msg.data as RoleCardData;
         break;
       }
-      case 'dm_private':
+      case 'dm_private': {
+        const key = `${msg.from}:${msg.content}`;
+        if (seenPrivateKeys.value.has(key)) break;
+        seenPrivateKeys.value.add(key);
         privateMessages.value.push({
           from: '🎭 DM',
           content: msg.content,
           timestamp: '',
         });
         break;
+      }
       case 'clue_unlock': {
         const clue = msg.clue as ClueData;
         // Avoid duplicate clues
@@ -138,10 +149,16 @@ export const useGameStore = defineStore('game', () => {
         }
         break;
       case 'player_left':
-        for (const [pid, p] of players.value) {
-          if (p.name === msg.player_name) {
-            players.value.delete(pid);
-            break;
+        // Match by player_id (server identifies players by UUID)
+        if (msg.player_id && players.value.has(msg.player_id)) {
+          players.value.delete(msg.player_id);
+        } else {
+          // Fallback: match by name
+          for (const [pid, p] of players.value) {
+            if (p.name === msg.player_name) {
+              players.value.delete(pid);
+              break;
+            }
           }
         }
         break;

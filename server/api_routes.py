@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 import json
 import logging
@@ -116,7 +116,7 @@ class DMPrivateRequest(BaseModel):
 
 class ChatResponseRequest(BaseModel):
     player_id: str
-    content: str
+    content: str = Field(min_length=1, max_length=500)
 
 
 class LLMConfigRequest(BaseModel):
@@ -528,9 +528,20 @@ def _push_event_generator(game_id: str, state):
 
 def _chat_response_generator(game_id: str, player_id: str, player_message: str, state):
     """SSE generator for DM chat response."""
+    from datetime import datetime
+    from server.game_manager import manager
+
     if state.phase not in ("playing", "waiting"):
         yield f"data: {{\"type\": \"error\", \"message\": \"只能在等待中或游戏中与DM对话\"}}\n\n"
         return
+
+    # Rate limiting: max 1 call per 30 seconds per player
+    last_chat = state.dm_chat_cooldowns.get(player_id)
+    if last_chat and (datetime.now() - last_chat).total_seconds() < 30:
+        yield f"data: {{\"type\": \"error\", \"message\": \"请等待30秒后再向DM提问\"}}\n\n"
+        return
+
+    state.dm_chat_cooldowns[player_id] = datetime.now()
 
     log.info(f"[chat-response] Player {player_id} chatting: {player_message[:50]}")
 
@@ -542,24 +553,7 @@ def _chat_response_generator(game_id: str, player_id: str, player_message: str, 
             full_reply += chunk
             yield f"data: {{\"type\": \"chunk\", \"content\": {json.dumps(chunk, ensure_ascii=False)}}}\n\n"
 
-        # Store the full reply
-        reply_msg = Message(
-            from_player_id="__dm__",
-            content=full_reply,
-            type="private",
-            to_player_id=player_id,
-        )
-        state.private_messages.append(reply_msg)
-
-        # Cache for WS reconnect
-        if player_id not in state.distributed_dm_private:
-            state.distributed_dm_private[player_id] = []
-        state.distributed_dm_private[player_id].append({
-            "type": "dm_private",
-            "from": "__dm__",
-            "to": player_id,
-            "content": full_reply,
-        })
+        manager.add_dm_chat_response(game_id, player_id, player_message, full_reply)
 
         done_payload = json.dumps({
             "type": "done",
