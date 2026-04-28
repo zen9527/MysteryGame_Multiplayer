@@ -114,6 +114,11 @@ class DMPrivateRequest(BaseModel):
     content: str
 
 
+class ChatResponseRequest(BaseModel):
+    player_id: str
+    content: str
+
+
 class LLMConfigRequest(BaseModel):
     endpoint: Optional[str] = None
     model: Optional[str] = None
@@ -211,6 +216,13 @@ async def add_player(game_id: str, req: PlayerJoinRequest):
     player = manager.add_player(game_id, req.player_id, req.name)
     if player is None:
         raise HTTPException(status_code=400, detail="房间已满或剧本未生成")
+    # Broadcast player_joined to all connected players
+    from server.websocket_hub import hub
+    await hub.broadcast(game_id, {
+        "type": "player_joined",
+        "player_id": player.id,
+        "player_name": player.name,
+    })
     return {"player_id": player.id, "name": player.name, "role_id": player.role_id}
 
 
@@ -363,6 +375,35 @@ async def set_script(game_id: str, req: SetScriptRequest):
 
     manager.set_script(game_id, req.script)
     state.script_generated = True
+
+    # Cache layer 1 role cards for all players (so they're available on WS reconnect)
+    for pid, player in state.players.items():
+        if player.role and pid not in state.distributed_role_cards:
+            state.distributed_role_cards[pid] = []
+            state.distributed_role_cards[pid].append({
+                "type": "role_card",
+                "layer": "1",
+                "player_id": pid,
+                "data": {
+                    "name": player.role.name,
+                    "description": player.role.description,
+                },
+            })
+
+    # Broadcast role assignments to connected players
+    from server.websocket_hub import hub
+    for pid, player in state.players.items():
+        if player.role:
+            await hub.send_to_player(game_id, pid, {
+                "type": "role_card",
+                "layer": "1",
+                "player_id": pid,
+                "data": {
+                    "name": player.role.name,
+                    "description": player.role.description,
+                },
+            })
+
     return {"status": "saved", "title": req.script.title}
 
 
@@ -485,6 +526,43 @@ def _push_event_generator(game_id: str, state):
         yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
 
 
+def _chat_response_generator(game_id: str, player_id: str, player_message: str, state):
+    """SSE generator for DM chat response."""
+    if state.phase not in ("playing", "waiting"):
+        yield f"data: {{\"type\": \"error\", \"message\": \"只能在等待中或游戏中与DM对话\"}}\n\n"
+        return
+
+    log.info(f"[chat-response] Player {player_id} chatting: {player_message[:50]}")
+
+    try:
+        yield f"data: {{\"type\": \"start\"}}\n\n"
+
+        full_reply = ""
+        for chunk in host_dm.respond_to_chat_stream(state, player_id, player_message):
+            full_reply += chunk
+            yield f"data: {{\"type\": \"chunk\", \"content\": {json.dumps(chunk, ensure_ascii=False)}}}\n\n"
+
+        # Store the full reply
+        from server.models import Message
+        reply_msg = Message(
+            from_player_id="__dm__",
+            content=full_reply,
+            type="private",
+            to_player_id=player_id,
+        )
+        state.private_messages.append(reply_msg)
+
+        done_payload = json.dumps({
+            "type": "done",
+            "content": full_reply,
+        }, ensure_ascii=False)
+        yield f"data: {done_payload}\n\n"
+
+    except Exception as e:
+        log.error(f"[chat-response] Failed: {type(e).__name__}: {e}", exc_info=True)
+        yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
+
+
 @router.post("/api/rooms/{game_id}/dm/push-event")
 async def push_event(game_id: str, req: PushEventRequest):
     """流式推进剧情（SSE），实时返回生成进度。"""
@@ -531,6 +609,27 @@ async def dm_private(game_id: str, req: DMPrivateRequest):
     return {"status": "dm_private_sent"}
 
 
+@router.post("/api/rooms/{game_id}/dm/chat-response")
+async def chat_response(game_id: str, req: ChatResponseRequest):
+    """流式DM私信回复（SSE），实时返回生成进度。"""
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+
+    manager.add_chat_message(game_id, req.player_id, req.content, is_private=True, target_player_id="__dm__")
+
+    return StreamingResponse(
+        _chat_response_generator(game_id, req.player_id, req.content, state),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.post("/api/rooms/{game_id}/force-trial")
 async def force_trial(game_id: str, req: AdminActionRequest):
     """强制进入审判（仅管理员）"""
@@ -570,7 +669,17 @@ async def kick_player(game_id: str, target_pid: str, req: AdminActionRequest):
         raise HTTPException(status_code=404, detail="Room not found")
     require_admin(req.player_id, game_id)
 
+    target_player = state.players.get(target_pid)
     manager.kick_player(game_id, target_pid)
+
+    # Broadcast player_left to all connected players
+    from server.websocket_hub import hub
+    await hub.broadcast(game_id, {
+        "type": "player_left",
+        "player_id": target_pid,
+        "player_name": target_player.name if target_player else "",
+    })
+
     return {"status": "kicked", "target_player_id": target_pid}
 
 
