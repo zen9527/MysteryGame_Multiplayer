@@ -9,6 +9,18 @@ from server.models import Message
 router = APIRouter()
 
 
+def _resolve_display_name(state, player_id: str) -> str:
+    """Resolve display name: '角色名(玩家名)' or '玩家名' if no role."""
+    if player_id == "__dm__":
+        return "🎭 DM"
+    if state and player_id in state.players:
+        player = state.players[player_id]
+        if player.role and player.role.name:
+            return f"{player.role.name}({player.name})"
+        return player.name
+    return player_id
+
+
 class WebSocketHub:
     def __init__(self):
         # room_id -> { player_id: WebSocket }
@@ -69,16 +81,13 @@ class WebSocketHub:
 
         if msg_type == "chat":
             content = data.get("content", "")
-            # Get player name for the broadcast
             state = manager.get_state(room_id)
-            player_name = player_id
-            if state and player_id in state.players:
-                player_name = state.players[player_id].name
+            display_name = _resolve_display_name(state, player_id)
             manager.add_chat_message(room_id, player_id, content, False, None)
-            # Broadcast chat with player NAME (not ID) to all players in room
+            # Broadcast chat with display name to all players in room
             await self.broadcast(room_id, {
                 "type": "chat",
-                "from": player_name,
+                "from": display_name,
                 "from_player_id": player_id,
                 "content": content,
                 "timestamp": "",
@@ -103,13 +112,11 @@ class WebSocketHub:
             target = data.get("target_role_name", "")
             reasoning = data.get("reasoning", "")
             state = manager.get_state(room_id)
-            player_name = player_id
-            if state and player_id in state.players:
-                player_name = state.players[player_id].name
-            manager.cache_accusation(room_id, player_name, player_id, target, reasoning)
+            display_name = _resolve_display_name(state, player_id)
+            manager.cache_accusation(room_id, display_name, player_id, target, reasoning)
             await self.broadcast(room_id, {
                 "type": "accusation",
-                "from": player_name,
+                "from": display_name,
                 "from_player_id": player_id,
                 "target": target,
                 "reasoning": reasoning,
@@ -119,12 +126,10 @@ class WebSocketHub:
             target = data.get("target_role_name", "")
             reasoning = data.get("reasoning", "")
             state = manager.get_state(room_id)
-            player_name = player_id
-            if state and player_id in state.players:
-                player_name = state.players[player_id].name
+            display_name = _resolve_display_name(state, player_id)
             await self.broadcast(room_id, {
                 "type": "vote_cast",
-                "from": player_name,
+                "from": display_name,
                 "from_player_id": player_id,
                 "target": target,
             })
@@ -196,12 +201,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, player_id: str)
 
         # Resend recent chat history (last 50 public messages)
         for msg in state.public_messages[-50:]:
-            # Resolve player name
-            sender_name = msg.from_player_id
-            if msg.from_player_id == "__dm__":
-                sender_name = "🎭 DM"
-            elif msg.from_player_id in state.players:
-                sender_name = state.players[msg.from_player_id].name
+            sender_name = _resolve_display_name(state, msg.from_player_id)
 
             if msg.type == "event":
                 await hub.send_to_player(room_id, player_id, {

@@ -5,11 +5,13 @@ from typing import Optional
 import json
 import logging
 import uuid
+import asyncio
 from starlette.concurrency import run_in_threadpool
 from server.models import Script, Role, Clue, PlotOutline, Vote, Accusation, Message
 from server.game_manager import manager
 from server.host_dm import host as host_dm
 from server.middleware import require_admin
+from server.websocket_hub import _resolve_display_name
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -186,11 +188,7 @@ async def get_room(game_id: str):
         "public_messages": [
             {
                 "from_player_id": m.from_player_id,
-                "from_player_name": (
-                    "🎭 DM" if m.from_player_id == "__dm__"
-                    else state.players[m.from_player_id].name if m.from_player_id in state.players
-                    else m.from_player_id
-                ),
+                "from_player_name": _resolve_display_name(state, m.from_player_id),
                 "content": m.content,
                 "type": m.type,
                 "timestamp": str(m.timestamp),
@@ -417,6 +415,26 @@ async def list_genres():
 
 # --- Game control endpoints ---
 
+async def _auto_generate_opening(game_id: str):
+    """Background task: generate DM opening narrative after game starts."""
+    state = manager.get_state(game_id)
+    if not state or state.phase != "playing":
+        return
+    try:
+        event = await asyncio.to_thread(host_dm.generate_event, state)
+        result = manager.push_structured_event(game_id, event)
+        if result:
+            from server.websocket_hub import hub
+            if result["public_event"]:
+                await hub.broadcast(game_id, {
+                    "type": "event",
+                    "content": result["public_event"],
+                })
+            for clue in result["private_clues"]:
+                await hub.send_dm_private(game_id, clue["player_id"], clue["content"])
+    except Exception as e:
+        manager.add_dm_log(game_id, f"开场白生成失败: {e}")
+
 @router.post("/api/rooms/{game_id}/start")
 async def start_game(game_id: str):
     state = manager.get_state(game_id)
@@ -493,6 +511,9 @@ async def start_game(game_id: str):
         # Send DM private messages
         for pid, content in unlock_result["private_events"]:
             await hub.send_dm_private(game_id, pid, content)
+
+    # Auto-generate DM opening narrative in background
+    asyncio.create_task(_auto_generate_opening(game_id))
 
     return {"game_id": game_id, "phase": state.phase}
 
