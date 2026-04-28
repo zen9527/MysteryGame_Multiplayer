@@ -3,12 +3,14 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import json
+import logging
 import uuid
 from server.models import Script, Role, Clue, PlotOutline, Vote, Accusation
 from server.game_manager import manager
 from server.host_dm import host as host_dm
 from server.middleware import require_admin
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 # --- Genre constants ---
@@ -463,7 +465,6 @@ def _push_event_generator(game_id: str, req: PushEventRequest):
         return
     require_admin(req.player_id, game_id)
 
-    log = logging.getLogger(__name__)
     log.info(f"[push-event-stream] Generating event for {game_id}, act={state.act}, round={state.current_round}")
 
     try:
