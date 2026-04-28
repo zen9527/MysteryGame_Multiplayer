@@ -5,7 +5,7 @@ from typing import Optional
 import json
 import logging
 import uuid
-from server.models import Script, Role, Clue, PlotOutline, Vote, Accusation
+from server.models import Script, Role, Clue, PlotOutline, Vote, Accusation, Message
 from server.game_manager import manager
 from server.host_dm import host as host_dm
 from server.middleware import require_admin
@@ -543,7 +543,6 @@ def _chat_response_generator(game_id: str, player_id: str, player_message: str, 
             yield f"data: {{\"type\": \"chunk\", \"content\": {json.dumps(chunk, ensure_ascii=False)}}}\n\n"
 
         # Store the full reply
-        from server.models import Message
         reply_msg = Message(
             from_player_id="__dm__",
             content=full_reply,
@@ -551,6 +550,16 @@ def _chat_response_generator(game_id: str, player_id: str, player_message: str, 
             to_player_id=player_id,
         )
         state.private_messages.append(reply_msg)
+
+        # Cache for WS reconnect
+        if player_id not in state.distributed_dm_private:
+            state.distributed_dm_private[player_id] = []
+        state.distributed_dm_private[player_id].append({
+            "type": "dm_private",
+            "from": "__dm__",
+            "to": player_id,
+            "content": full_reply,
+        })
 
         done_payload = json.dumps({
             "type": "done",
