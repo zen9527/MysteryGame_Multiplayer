@@ -15,13 +15,20 @@
           <span class="text">{{ msg.content }}</span>
         </div>
       </div>
+      <div v-if="isStreaming" class="streaming-status">
+        🤖 DM正在思考...
+      </div>
+      <div v-if="pendingReply" class="pending-reply">
+        <span class="sender">🎭 DM</span>
+        <span class="text">{{ pendingReply }}</span>
+      </div>
       <div class="chat-input-row">
         <input
           v-model="newMessage"
           @keyup.enter="sendDMPrivate"
-          placeholder="回复DM..."
+          placeholder="向DM提问..."
         />
-        <button @click="sendDMPrivate" :disabled="!newMessage.trim()">发送</button>
+        <button @click="sendDMPrivate" :disabled="!newMessage.trim() || isStreaming">发送</button>
       </div>
     </div>
   </div>
@@ -46,25 +53,91 @@ const messageContainer = ref<HTMLElement | null>(null);
 const privateMessages = computed(() => store.privateMessages);
 const hasPlayer = computed(() => !!playerId);
 
+// Streaming state
+const isStreaming = ref(false);
+const pendingReply = ref('');
+
 async function sendDMPrivate() {
   const text = newMessage.value.trim();
-  if (!text || !playerId) return;
+  if (!text || !playerId || isStreaming.value) return;
+
+  isStreaming.value = true;
+  pendingReply.value = '';
+  newMessage.value = '';
 
   try {
-    const res = await fetch(`/api/rooms/${gameId}/dm/private`, {
+    const res = await fetch(`/api/rooms/${gameId}/dm/chat-response`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         player_id: playerId,
-        to_player_id: playerId,
         content: text,
       }),
     });
-    if (res.ok) {
-      newMessage.value = '';
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('DM回复失败:', err.detail || '未知错误');
+      pendingReply.value = 'DM 暂时无法回应，请稍后再试。';
+      return;
     }
-  } catch (e) {
-    console.error('DM private failed:', e);
+
+    // Consume SSE stream — same pattern as GamePage.vue handlePushEvent
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            let data;
+            try {
+              data = JSON.parse(line.slice(6));
+            } catch {
+              /* skip malformed SSE */
+              continue;
+            }
+            switch (data.type) {
+              case 'start':
+                console.log('[chat-response] DM starting...');
+                break;
+              case 'chunk':
+                pendingReply.value += data.content;
+                await nextTick();
+                if (messageContainer.value) {
+                  messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
+                }
+                break;
+              case 'done':
+                store.privateMessages.push({
+                  from: '🎭 DM',
+                  content: data.content,
+                  timestamp: '',
+                });
+                console.log(`[chat-response] Done: ${data.content.length} chars`);
+                break;
+              case 'error':
+                throw new Error(data.message);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  } catch (e: any) {
+    console.warn('DM私信请求失败:', e);
+    pendingReply.value = 'DM 暂时无法回应，请稍后再试。';
+  } finally {
+    isStreaming.value = false;
   }
 
   await nextTick();
@@ -151,4 +224,16 @@ onMounted(() => {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.streaming-status {
+  text-align: center; color: #e94560; font-size: 13px; margin-bottom: 8px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+.pending-reply {
+  padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.pending-reply .sender { font-weight: bold; color: #e94560; margin-right: 8px; }
+.pending-reply .text { color: #ddd; font-size: 13px; line-height: 1.6; }
 </style>
