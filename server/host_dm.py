@@ -122,5 +122,66 @@ class HostDM:
         """生成剧本"""
         return self.llm.generate_script(system_prompt, user_prompt)
 
+    DM_CHAT_SYSTEM_PROMPT = """你是一名专业的剧本杀主持人（DM）。玩家正在通过私信与你对话。
+
+你的职责：
+1. 根据当前游戏阶段和剧本设定，给玩家合适的回应
+2. 如果玩家询问线索，根据阶段决定是否透露（第一幕给模糊提示，第二幕给具体线索）
+3. 如果玩家询问规则，简洁说明
+4. 如果玩家表达推理，给予鼓励或引导
+5. 保持DM身份，不要直接透露凶手或关键剧情
+
+规则：
+- 回复使用中文，语气亲切但保持神秘感
+- 不要一次性透露太多信息
+- 根据玩家角色和当前幕次给出差异化回应
+- 回复长度控制在 50-200 字
+- 只回复纯文本，不要JSON格式"""
+
+    def respond_to_chat(self, game_state: GameState, player_id: str, player_message: str) -> str:
+        """Generate a DM response to a player's private message. Returns plain text."""
+        player = game_state.players.get(player_id)
+        role_name = player.role.name if player and player.role else "未分配"
+
+        chat_summary = []
+        for msg in game_state.private_messages[-10:]:
+            sender = "🎭 DM" if msg.from_player_id == "__dm__" else msg.from_player_id
+            chat_summary.append(f"{sender}: {msg.content}")
+
+        user_input = f"""你正在与一名玩家私信对话。
+当前是第{game_state.current_round}轮，第{game_state.act}幕。
+玩家角色：{role_name}
+玩家消息：{player_message}
+私信历史：
+{''.join(chat_summary) if chat_summary else '暂无私信记录'}
+
+请给玩家一个符合DM身份的回复。"""
+
+        full_reply = ""
+        for chunk in self.llm.chat_stream(self.DM_CHAT_SYSTEM_PROMPT, user_input):
+            full_reply += chunk
+        return full_reply
+
+    def respond_to_chat_stream(self, game_state: GameState, player_id: str, player_message: str):
+        """Stream a DM response to a player's private message. Yields content chunks."""
+        player = game_state.players.get(player_id)
+        role_name = player.role.name if player and player.role else "未分配"
+
+        chat_summary = []
+        for msg in game_state.private_messages[-10:]:
+            sender = "🎭 DM" if msg.from_player_id == "__dm__" else msg.from_player_id
+            chat_summary.append(f"{sender}: {msg.content}")
+
+        user_input = f"""你正在与一名玩家私信对话。
+当前是第{game_state.current_round}轮，第{game_state.act}幕。
+玩家角色：{role_name}
+玩家消息：{player_message}
+私信历史：
+{''.join(chat_summary) if chat_summary else '暂无私信记录'}
+
+请给玩家一个符合DM身份的回复。"""
+
+        yield from self.llm.chat_stream(self.DM_CHAT_SYSTEM_PROMPT, user_input)
+
 
 host = HostDM()
