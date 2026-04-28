@@ -9,8 +9,8 @@ export type WSMessage =
   | { type: "vote_result"; round: number; results: Record<string, number>; consensus: boolean }
   | { type: "reveal"; truth: object; player_evaluations: Record<string, string> }
   | { type: "game_over"; result: "correct" | "wrong" | "time_out" }
-  | { type: "player_joined"; player_name: string; role_name: string }
-  | { type: "player_left"; player_name: string }
+  | { type: "player_joined"; player_id: string; player_name: string; role_name?: string }
+  | { type: "player_left"; player_id: string; player_name: string }
   | { type: "role_assigned"; role: object; secret: object }
   | { type: "role_card"; layer: "1" | "2" | "3"; player_id: string; data: Record<string, unknown> }
   | { type: "dm_private"; from: "__dm__"; to: string; content: string }

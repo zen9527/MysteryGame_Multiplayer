@@ -14,7 +14,10 @@
         <!-- DM Event Display -->
         <div class="event-section">
           <h2>📜 公共事件</h2>
-          <div v-if="currentEvent" class="event-content">{{ currentEvent }}</div>
+          <div v-if="adminLoading" class="event-content generating">
+            🤖 DM正在生成事件...
+          </div>
+          <div v-else-if="currentEvent" class="event-content">{{ currentEvent }}</div>
           <div v-else class="no-event">等待DM发布事件...</div>
         </div>
 
@@ -66,11 +69,13 @@
 
           <!-- Actions Tab -->
           <div v-if="activeTab === 'action'" class="actions-panel">
-            <!-- Player List (names only, no roles) -->
+            <!-- Player List (name + role) -->
             <div class="players-section">
               <h2>👥 玩家 ({{ playerCount }})</h2>
               <div v-for="player in playersList" :key="player.pid" class="player-item">
                 <span>{{ player.name }}</span>
+                <span v-if="player.role_id && roleLookup[player.role_id]" class="role-tag">{{ roleLookup[player.role_id] }}</span>
+                <span v-else-if="player.role_id" class="role-tag">待分配</span>
                 <span v-if="player.pid === roomCreatorId" class="admin-tag">👑</span>
               </div>
             </div>
@@ -174,6 +179,7 @@ const isAdmin = ref(false);
 const roomCreatorId = ref('');
 const dmLog = ref<string[]>([]);
 const timerSeconds = ref(3600);
+const roleLookup = ref<Record<string, string>>({});
 
 // Tabs
 const tabs = [
@@ -226,6 +232,14 @@ async function fetchState() {
 
     if (phase.value === 'playing') {
       timerSeconds.value = 90 * 60;
+    }
+
+    // Build role lookup table (role_id → role_name)
+    if (data.script?.roles) {
+      roleLookup.value = {};
+      for (const role of data.script.roles) {
+        roleLookup.value[role.id] = role.name;
+      }
     }
 
     // Update players in store
@@ -445,6 +459,8 @@ onUnmounted(() => {
 .event-section { background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 16px; flex-shrink: 0; max-height: 200px; overflow-y: auto; }
 .event-section h2 { font-size: 16px; color: #aaa; margin-bottom: 12px; }
 .event-content { background: rgba(0, 0, 0, 0.2); padding: 12px; border-radius: 6px; line-height: 1.6; color: #ddd; white-space: pre-wrap; }
+.event-content.generating { background: rgba(233, 69, 96, 0.15); color: #e94560; animation: pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 .no-event { color: #666; font-style: italic; }
 
 .chat-section { flex: 1; background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; min-height: 0; }
@@ -492,6 +508,7 @@ onUnmounted(() => {
 h2 { font-size: 14px; color: #aaa; margin-bottom: 12px; }
 
 .player-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+.role-tag { font-size: 12px; color: #e94560; }
 .admin-tag { font-size: 12px; color: #f39c12; font-weight: bold; }
 
 .actions-section button { width: 100%; padding: 10px; margin-bottom: 8px; border: none; border-radius: 6px; background: #0f3460; color: #eee; cursor: pointer; }

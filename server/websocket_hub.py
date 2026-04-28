@@ -154,10 +154,16 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, player_id: str)
             "act": state.act,
         })
 
-        # Resend cached role card layer 1 (always available once game started)
-        if state.phase != "waiting" and player_id in state.players:
+        # Resend cached role card layer 1 (from script generation or game start)
+        if player_id in state.players:
             player = state.players[player_id]
-            if player.role:
+            # First send from cache (set_script or start_game cached it)
+            cached = state.distributed_role_cards.get(player_id, [])
+            for msg in cached:
+                if msg.get("layer") == "1":
+                    await hub.send_to_player(room_id, player_id, msg)
+            # Also send from current role if not in cache
+            if player.role and not any(m.get("layer") == "1" for m in cached):
                 await hub.send_to_player(room_id, player_id, {
                     "type": "role_card",
                     "layer": "1",
@@ -206,4 +212,11 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, player_id: str)
             data = await websocket.receive_json()
             await hub.handle_client_message(room_id, player_id, data)
     except WebSocketDisconnect:
+        # Broadcast player_left before disconnecting
+        if state and player_id in state.players:
+            await hub.broadcast(room_id, {
+                "type": "player_left",
+                "player_id": player_id,
+                "player_name": state.players[player_id].name,
+            })
         hub.disconnect(websocket)
