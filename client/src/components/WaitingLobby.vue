@@ -367,11 +367,11 @@ async function generateScript() {
                 if (elapsed < 3) {
                   genProgress.value = 0;
                   genStatus.value = '正在初始化...';
-                } else if (elapsed < 10) {
-                  genProgress.value = Math.min(40, Math.floor(chunkCount / 15));
-                  genStatus.value = '正在生成剧本...';
                 } else {
-                  genProgress.value = Math.min(95, Math.floor(40 + (chunkCount - 15) / 20));
+                  // Monotonic time-based progress (0→95% over 300s) + small chunk bumps
+                  const timeProgress = Math.min(90, Math.floor(elapsed / 300 * 90));
+                  const chunkBump = Math.min(5, chunkCount);
+                  genProgress.value = Math.min(95, timeProgress + chunkBump);
                   genStatus.value = '正在生成剧本...';
                 }
                 break;
