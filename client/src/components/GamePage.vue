@@ -345,36 +345,39 @@ async function handlePushEvent() {
     const decoder = new TextDecoder();
     let buffer = '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n\n');
-      buffer = lines.pop() || '';
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            switch (data.type) {
-              case 'start':
-                console.log('[push-event] LLM starting...');
-                break;
-              case 'chunk':
-                console.log('[push-event] Token chunk received');
-                break;
-              case 'done':
-                currentEvent.value = data.public_event || '';
-                console.log(`[push-event] Done: ${data.private_clues_count} private clues`);
-                break;
-              case 'error':
-                console.error('[push-event] Error:', data.message);
-                break;
-            }
-          } catch { /* skip malformed SSE */ }
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              switch (data.type) {
+                case 'start':
+                  console.log('[push-event] LLM starting...');
+                  break;
+                case 'chunk':
+                  // Token streaming — no UI feedback needed (adminLoading stays true)
+                  break;
+                case 'done':
+                  currentEvent.value = data.public_event || '';
+                  console.log(`[push-event] Done: ${data.private_clues_count} private clues`);
+                  break;
+                case 'error':
+                  throw new Error(data.message);
+              }
+            } catch { /* skip malformed SSE */ }
+          }
         }
       }
+    } finally {
+      reader.releaseLock();
     }
   } catch (e) {
     console.warn('推进剧情请求失败:', e);
