@@ -100,17 +100,34 @@ class WebSocketHub:
                 await self.send_to_player(room_id, target, chat_msg)
 
         elif msg_type == "accuse":
-            # Broadcast accusation to all players
+            target = data.get("target_role_name", "")
+            reasoning = data.get("reasoning", "")
+            state = manager.get_state(room_id)
+            player_name = player_id
+            if state and player_id in state.players:
+                player_name = state.players[player_id].name
+            manager.cache_accusation(room_id, player_id, target, reasoning)
             await self.broadcast(room_id, {
                 "type": "accusation",
-                "from": player_id,
-                "target": data.get("target_role_name", ""),
-                "reasoning": data.get("reasoning", ""),
+                "from": player_name,
+                "from_player_id": player_id,
+                "target": target,
+                "reasoning": reasoning,
             })
 
         elif msg_type == "vote":
-            # Record vote (handled by API endpoint too)
-            pass
+            target = data.get("target_role_name", "")
+            reasoning = data.get("reasoning", "")
+            state = manager.get_state(room_id)
+            player_name = player_id
+            if state and player_id in state.players:
+                player_name = state.players[player_id].name
+            await self.broadcast(room_id, {
+                "type": "vote_cast",
+                "from": player_name,
+                "from_player_id": player_id,
+                "target": target,
+            })
 
         elif msg_type == "request_advance":
             # Player requests DM to advance — trigger LLM event generation

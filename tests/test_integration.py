@@ -113,7 +113,8 @@ def test_end_game_by_admin():
         json={"player_id": "admin_1"},
     )
     assert response.status_code == 200
-    assert response.json()["phase"] == "revealed"
+    # SSE response — verify it's a stream
+    assert "text/event-stream" in response.headers.get("content-type", "")
 
 
 def test_dm_log_endpoint():

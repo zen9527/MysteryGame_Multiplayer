@@ -380,3 +380,18 @@ def test_parse_event_response_invalid_json_fallback():
     assert result["public_event"] == "这不是JSON，只是普通文本"
     assert result["private_clues"] == []
     assert result["dm_instruction"] == ""
+
+
+def test_cache_accusation(game_manager, sample_script):
+    game_manager.create_game("test-game", "admin")
+    state = game_manager.get_state("test-game")
+    state.script = sample_script
+    from server.models import Player, Role
+    role = Role(id="r1", name="张三", age=30, occupation="医生", description="", background="", secret_task="", alibi="", motive="")
+    state.players["p2"] = Player(id="p2", name="李四", role_id="r1", role=role)
+    game_manager.cache_accusation("test-game", "p2", "张三", "他有动机")
+
+    pending = game_manager.get_pending_distributions("test-game", "p2")
+    accusations = [m for m in pending if m.get("type") == "accusation"]
+    assert len(accusations) == 1
+    assert accusations[0]["target"] == "张三"

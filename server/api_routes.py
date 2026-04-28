@@ -5,6 +5,7 @@ from typing import Optional
 import json
 import logging
 import uuid
+from starlette.concurrency import run_in_threadpool
 from server.models import Script, Role, Clue, PlotOutline, Vote, Accusation, Message
 from server.game_manager import manager
 from server.host_dm import host as host_dm
@@ -686,6 +687,17 @@ async def advance_act(game_id: str, req: AdminActionRequest):
         "act": new_act,
     })
 
+    # Broadcast act transition notification with plot outline
+    plot_text = ""
+    act_key = f"act{new_act}"
+    if hasattr(state.script, 'plot_outline') and state.script.plot_outline:
+        plot_text = getattr(state.script.plot_outline, act_key, "")
+    await hub.broadcast(game_id, {
+        "type": "act_transition",
+        "act": new_act,
+        "plot_summary": plot_text,
+    })
+
     if unlock_result:
         # Send role cards (new layers)
         for pid, card_data in unlock_result["role_cards"].items():
@@ -712,23 +724,46 @@ async def advance_act(game_id: str, req: AdminActionRequest):
     return {"status": "act_advanced", "act": new_act}
 
 
+def _end_game_generator(game_id: str, state):
+    """SSE generator for game end with truth reveal streaming."""
+    log.info(f"[end-game] Generating truth reveal for {game_id}")
+
+    try:
+        yield f"data: {{\"type\": \"start\"}}\n\n"
+
+        reveal_content = host_dm.generate_event(state)
+        manager.push_event(game_id, f"📢 真相揭晓：{reveal_content}")
+
+        done_payload = json.dumps({
+            "type": "done",
+            "content": reveal_content,
+        }, ensure_ascii=False)
+        yield f"data: {done_payload}\n\n"
+
+    except Exception as e:
+        log.error(f"[end-game] Reveal generation failed: {type(e).__name__}: {e}", exc_info=True)
+        yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
+    finally:
+        manager.end_game(game_id)
+
+
 @router.post("/api/rooms/{game_id}/end-game")
 async def end_game(game_id: str, req: AdminActionRequest):
-    """提前结束游戏（仅管理员）"""
+    """流式结束游戏（SSE），实时揭晓真相。"""
     state = manager.get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
     require_admin(req.player_id, game_id)
 
-    # Generate truth reveal via LLM (non-blocking in production, graceful fallback)
-    try:
-        reveal_content = host_dm.generate_event(state)
-        manager.push_event(game_id, f"📢 真相揭晓：{reveal_content}")
-    except Exception:
-        pass
-
-    manager.end_game(game_id)
-    return {"status": "game_ended", "phase": state.phase}
+    return StreamingResponse(
+        _end_game_generator(game_id, state),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/api/rooms/{game_id}/players/{target_pid}/kick")
@@ -862,7 +897,7 @@ async def test_llm(req: Optional[LLMConfigRequest] = None):
     try:
         import time
         start = time.time()
-        result = host_dm.llm.test_connection()
+        result = await run_in_threadpool(host_dm.llm.test_connection)
         elapsed = time.time() - start
         return {
             "status": "connected",
@@ -896,7 +931,7 @@ def _normalize_endpoint(url: Optional[str]) -> str:
 async def list_llm_models():
     """获取 LLM 提供商可用的模型列表"""
     try:
-        models = host_dm.llm.list_models()
+        models = await run_in_threadpool(host_dm.llm.list_models)
         return {"models": models}
     except Exception as e:
         return {"models": [], "error": str(e)}

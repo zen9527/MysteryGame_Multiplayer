@@ -385,6 +385,18 @@ class GameManager:
                 "content": content,
             })
 
+    def cache_accusation(self, game_id: str, from_player_id: str, target: str, reasoning: str):
+        """Cache an accusation for WS reconnect replay."""
+        if game_id not in self.games:
+            return
+        state = self.games[game_id]
+        state.distributed_accusations.append({
+            "type": "accusation",
+            "from": from_player_id,
+            "target": target,
+            "reasoning": reasoning,
+        })
+
     def get_pending_distributions(self, game_id: str, player_id: str) -> list:
         """Get all cached distribution messages for a player (for WS connect/resend)."""
         if game_id not in self.games:
@@ -394,6 +406,7 @@ class GameManager:
         messages.extend(state.distributed_role_cards.get(player_id, []))
         messages.extend(state.distributed_clues.get(player_id, []))
         messages.extend(state.distributed_dm_private.get(player_id, []))
+        messages.extend(state.distributed_accusations)
         return messages
 
     def unlock_phase(self, game_id: str, new_phase: str, new_act: int):
