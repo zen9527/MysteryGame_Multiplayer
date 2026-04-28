@@ -21,6 +21,14 @@
           <div v-else class="no-event">等待DM发布事件...</div>
         </div>
 
+        <!-- Act Transition Banner -->
+        <div v-if="actBanner" class="act-banner">
+          <div class="act-banner-content">
+            <span class="act-banner-title">📖 第{{ actBanner.act }}幕开始</span>
+            <span v-if="actBanner.plot_summary" class="act-banner-text">{{ actBanner.plot_summary }}</span>
+          </div>
+        </div>
+
         <!-- Public Chat -->
         <div class="chat-section">
           <h2>💬 公共聊天</h2>
@@ -100,7 +108,7 @@
               </select>
               <textarea v-model="reasoning" placeholder="写下你的推理..."></textarea>
               <div class="accusation-buttons">
-                <button @click="submitAccusation" :disabled="!targetRole || !reasoning">提交指控</button>
+                <button @click="submitAccusation" :disabled="!targetRole || !reasoning || submittingAccusation">{{ submittingAccusation ? '提交中...' : '提交指控' }}</button>
                 <button @click="showAccusation = false" class="cancel-btn">取消</button>
               </div>
             </div>
@@ -115,7 +123,7 @@
                 </option>
               </select>
               <textarea v-model="voteReasoning" placeholder="写下你的推理..."></textarea>
-              <button @click="submitVote" :disabled="!voteTarget || !voteReasoning">提交投票</button>
+              <button @click="submitVote" :disabled="!voteTarget || !voteReasoning || submittingVote">{{ submittingVote ? '提交中...' : '提交投票' }}</button>
             </div>
 
             <!-- Reveal Section -->
@@ -168,7 +176,8 @@ const currentEvent = ref('');
 const activeTab = ref(storeActiveTab.value);
 watch(storeActiveTab, (v) => { activeTab.value = v; });
 const playersMap = computed(() => storePlayers.value);
-const publicMessages = computed(() => storePublicMessages.value);
+  const publicMessages = computed(() => storePublicMessages.value);
+  const actBanner = computed(() => store.actBanner);
 
 // Store → Local (WS messages update store, watchers sync to local)
 watch(storePhase, (v) => { phase.value = v; });
@@ -205,7 +214,12 @@ const voteReasoning = ref('');
 const adminLoading = ref(false);
 
 // Player action loading state
-const requestingClue = ref(false);
+  const requestingClue = ref(false);
+  const submittingAccusation = ref(false);
+  const submittingVote = ref(false);
+  const addingClue = ref(false);
+  const advancingAct = ref(false);
+  const forcingTrial = ref(false);
 
 // WebSocket
 let ws: WebSocket | null = null;
@@ -325,33 +339,51 @@ async function requestClue() {
   setTimeout(() => { requestingClue.value = false; }, 15000);
 }
 
-async function submitAccusation() {
-  if (!targetRole.value || !reasoning.value) return;
-  sendWSMessage('accuse', { target_role_name: targetRole.value, reasoning: reasoning.value });
-  try {
-    await fetch(`/api/rooms/${gameId}/accusations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from_player_id: playerId, target_role_name: targetRole.value, reasoning: reasoning.value }),
-    });
-  } catch (e) { console.error(e); }
-  showAccusation.value = false;
-  targetRole.value = '';
-  reasoning.value = '';
-}
+  async function submitAccusation() {
+    if (!targetRole.value || !reasoning.value || submittingAccusation.value) return;
+    submittingAccusation.value = true;
+    sendWSMessage('accuse', { target_role_name: targetRole.value, reasoning: reasoning.value });
+    try {
+      const res = await fetch(`/api/rooms/${gameId}/accusations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_player_id: playerId, target_role_name: targetRole.value, reasoning: reasoning.value }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || '提交指控失败');
+      }
+    } catch (e) {
+      alert('提交指控失败: 网络错误');
+    } finally {
+      submittingAccusation.value = false;
+    }
+    showAccusation.value = false;
+    targetRole.value = '';
+    reasoning.value = '';
+  }
 
-async function submitVote() {
-  if (!voteTarget.value || !voteReasoning.value) return;
-  try {
-    await fetch(`/api/rooms/${gameId}/votes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from_player_id: playerId, target_role_name: voteTarget.value, reasoning: voteReasoning.value }),
-    });
-  } catch (e) { console.error(e); }
-  voteTarget.value = '';
-  voteReasoning.value = '';
-}
+  async function submitVote() {
+    if (!voteTarget.value || !voteReasoning.value || submittingVote.value) return;
+    submittingVote.value = true;
+    try {
+      const res = await fetch(`/api/rooms/${gameId}/votes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_player_id: playerId, target_role_name: voteTarget.value, reasoning: voteReasoning.value }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || '提交投票失败');
+      }
+    } catch (e) {
+      alert('提交投票失败: 网络错误');
+    } finally {
+      submittingVote.value = false;
+    }
+    voteTarget.value = '';
+    voteReasoning.value = '';
+  }
 
 // Admin actions
 async function handlePushEvent() {
@@ -420,56 +452,131 @@ async function handlePushEvent() {
   }
 }
 
-async function handleAddClue(clue: { title: string; content: string }) {
-  try {
-    await fetch(`/api/rooms/${gameId}/dm/add-clue`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player_id: playerId, clue_title: clue.title, clue_content: clue.content }),
-    });
-  } catch (e) { console.error(e); }
-}
-
-async function handleAdvanceAct() {
-  if (!confirm(`确定要推进到第${act.value + 1}幕吗？这将解锁新的角色卡、线索和私信。`)) return;
-  try {
-    const res = await fetch(`/api/rooms/${gameId}/advance-act`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player_id: playerId }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      alert(err.detail || '推进失败');
-    } else {
-      const data = await res.json();
-      console.log(`[advance-act] Now at act ${data.act}`);
-      fetchState();
+  async function handleAddClue(clue: { title: string; content: string }) {
+    addingClue.value = true;
+    try {
+      const res = await fetch(`/api/rooms/${gameId}/dm/add-clue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: playerId, clue_title: clue.title, clue_content: clue.content }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || '追加线索失败');
+      }
+    } catch (e) {
+      alert('追加线索失败: 网络错误');
+    } finally {
+      addingClue.value = false;
     }
-  } catch (e) { console.error(e); }
-}
+  }
 
-async function handleForceTrial() {
-  if (!confirm('确定要强制进入审判阶段吗？')) return;
-  try {
-    await fetch(`/api/rooms/${gameId}/force-trial`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player_id: playerId }),
-    });
-  } catch (e) { console.error(e); }
-}
+  async function handleAdvanceAct() {
+    if (!confirm(`确定要推进到第${act.value + 1}幕吗？这将解锁新的角色卡、线索和私信。`)) return;
+    advancingAct.value = true;
+    try {
+      const res = await fetch(`/api/rooms/${gameId}/advance-act`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: playerId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || '推进失败');
+      } else {
+        const data = await res.json();
+        console.log(`[advance-act] Now at act ${data.act}`);
+        fetchState();
+      }
+    } catch (e) {
+      alert('推进失败: 网络错误');
+    } finally {
+      advancingAct.value = false;
+    }
+  }
 
-async function handleEndGame() {
-  if (!confirm('确定要提前结束游戏并揭晓真相吗？')) return;
-  try {
-    await fetch(`/api/rooms/${gameId}/end-game`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player_id: playerId }),
-    });
-  } catch (e) { console.error(e); }
-}
+  async function handleForceTrial() {
+    if (!confirm('确定要强制进入审判阶段吗？')) return;
+    forcingTrial.value = true;
+    try {
+      const res = await fetch(`/api/rooms/${gameId}/force-trial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: playerId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || '操作失败');
+      } else {
+        fetchState();
+      }
+    } catch (e) {
+      alert('操作失败: 网络错误');
+    } finally {
+      forcingTrial.value = false;
+    }
+  }
+
+  async function handleEndGame() {
+    if (!confirm('确定要提前结束游戏并揭晓真相吗？')) return;
+    adminLoading.value = true;
+    try {
+      const res = await fetch(`/api/rooms/${gameId}/end-game`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: playerId }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || '结束游戏失败');
+        return;
+      }
+
+      // Consume SSE stream
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                switch (data.type) {
+                  case 'start':
+                    currentEvent.value = '🎭 正在揭晓真相...';
+                    break;
+                  case 'done':
+                    currentEvent.value = data.content || '';
+                    fetchState();
+                    break;
+                  case 'error':
+                    console.error('[end-game] Error:', data.message);
+                    break;
+                }
+              } catch { /* skip malformed SSE */ }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (e) {
+      console.error('结束游戏失败:', e);
+      alert('结束游戏失败: 网络错误');
+    } finally {
+      adminLoading.value = false;
+    }
+  }
 
 onMounted(() => {
   fetchState();
@@ -497,6 +604,12 @@ onUnmounted(() => {
 .event-content.generating { background: rgba(233, 69, 96, 0.15); color: #e94560; animation: pulse 1.5s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 .no-event { color: #666; font-style: italic; }
+
+.act-banner { background: linear-gradient(135deg, #8e44ad, #0f3460); border-radius: 8px; padding: 16px; margin-bottom: 16px; animation: banner-appear 0.5s ease-out; }
+.act-banner-content { text-align: center; }
+.act-banner-title { font-size: 18px; font-weight: bold; color: #fff; display: block; margin-bottom: 8px; }
+.act-banner-text { font-size: 13px; color: #ddd; line-height: 1.6; }
+@keyframes banner-appear { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 
 .chat-section { flex: 1; background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; min-height: 0; }
 .chat-section h2 { font-size: 16px; color: #aaa; margin-bottom: 12px; }

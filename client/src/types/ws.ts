@@ -15,7 +15,9 @@ export type WSMessage =
   | { type: "role_card"; layer: "1" | "2" | "3"; player_id: string; data: Record<string, unknown> }
   | { type: "dm_private"; from: "__dm__"; to: string; content: string }
   | { type: "clue_unlock"; player_id: string; clue: { id: string; title: string; content: string; content_hint: string; is_red_herring: boolean } }
-  | { type: "phase_unlock"; phase: string; act: number };
+  | { type: "phase_unlock"; phase: string; act: number }
+  | { type: "vote_cast"; from: string; from_player_id: string; target: string }
+  | { type: "act_transition"; act: number; plot_summary: string };
 
 export type ClientMessage =
   | { type: "join"; player_name: string }

@@ -56,6 +56,9 @@ export const useGameStore = defineStore('game', () => {
   // Track which private messages we've already seen (by from+content) to prevent duplicates
   const seenPrivateKeys = ref<Set<string>>(new Set());
 
+  // Act transition banner (auto-dismiss)
+  const actBanner = ref<{ act: number; plot_summary: string } | null>(null);
+
   function _addPublicMessage(from: string, content: string, timestamp: string, isEvent = false) {
     // Key without timestamp — WS messages have timestamp="" while API messages have real timestamps
     // Same message from same sender must deduplicate regardless of source
@@ -129,6 +132,7 @@ export const useGameStore = defineStore('game', () => {
         }
         break;
       case 'accusation':
+        _addPublicMessage(`🔍 ${msg.from} 指控 ${msg.target}`, msg.reasoning, '');
         break;
       case 'trial_start':
         phase.value = 'trial';
@@ -136,11 +140,22 @@ export const useGameStore = defineStore('game', () => {
         break;
       case 'vote_result':
         break;
+      case 'vote_cast':
+        _addPublicMessage(`🗳️ ${msg.from} 投票给了 ${msg.target}`, '', '');
+        break;
       case 'reveal':
         phase.value = 'revealed';
         break;
       case 'game_over':
         phase.value = 'finished';
+        break;
+      case 'act_transition':
+        actBanner.value = { act: msg.act, plot_summary: msg.plot_summary };
+        setTimeout(() => {
+          if (actBanner.value && actBanner.value.act === msg.act) {
+            actBanner.value = null;
+          }
+        }, 8000);
         break;
       case 'phase_unlock':
         if (VALID_PHASES.includes(msg.phase as ValidPhase)) {
@@ -184,6 +199,7 @@ export const useGameStore = defineStore('game', () => {
     privateMessages,
     clues,
     activeTab,
+    actBanner,
     handleWSMessage,
     loadPublicMessagesFromAPI,
   };

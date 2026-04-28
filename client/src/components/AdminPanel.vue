@@ -7,11 +7,11 @@
         ⏭️ {{ loading ? '生成中...' : '推进剧情' }}
       </button>
       <button @click="$emit('advance-act')" :disabled="loading" class="action-btn next-act">
-        📖 推进下一幕
+        📖 {{ loading ? '处理中...' : '推进下一幕' }}
       </button>
-      <button @click="showClueInput = true" class="action-btn clue">🔍 追加线索</button>
-      <button @click="$emit('force-trial')" class="action-btn trial">⚖️ 强制审判</button>
-      <button @click="$emit('end-game')" class="action-btn end">🛑 提前结束</button>
+      <button @click="showClueInput = true" :disabled="loading" class="action-btn clue">🔍 追加线索</button>
+      <button @click="$emit('force-trial')" :disabled="loading" class="action-btn trial">⚖️ 强制审判</button>
+      <button @click="$emit('end-game')" :disabled="loading" class="action-btn end">🛑 提前结束</button>
     </div>
 
     <!-- Clue input modal -->
