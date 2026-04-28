@@ -88,6 +88,7 @@
           <div class="progress-bar" :style="{ width: genProgress + '%' }"></div>
           <span class="progress-text">{{ genProgress }}%</span>
         </div>
+        <div v-if="generating && genStatus" class="gen-status">{{ genStatus }}</div>
       </div>
 
       <!-- Script Preview/Editor -->
@@ -161,6 +162,7 @@ const generating = ref(false);
 const genProgress = ref(0);
 const generatedScript = ref<any | null>(null);
 const genError = ref('');
+const genStatus = ref('');
 
 // LLM config
 const llmConfigExpanded = ref(false);
@@ -317,6 +319,7 @@ async function testLLM() {
 async function generateScript() {
   generating.value = true;
   genProgress.value = 0;
+  genStatus.value = '正在初始化...';
   genError.value = '';
   try {
     const res = await fetch(`/api/rooms/${gameId}/generate-script`, {
@@ -338,6 +341,7 @@ async function generateScript() {
     const decoder = new TextDecoder();
     let buffer = '';
     let chunkCount = 0;
+    let startTime = Date.now();
 
     while (true) {
       const { done, value } = await reader.read();
@@ -354,13 +358,26 @@ async function generateScript() {
             switch (data.type) {
               case 'start':
                 chunkCount = 0;
+                startTime = Date.now();
+                genStatus.value = '正在初始化...';
                 break;
               case 'chunk':
                 chunkCount++;
-                genProgress.value = Math.min(99, Math.floor(chunkCount / 10));
+                const elapsed = (Date.now() - startTime) / 1000;
+                if (elapsed < 3) {
+                  genProgress.value = 0;
+                  genStatus.value = '正在初始化...';
+                } else if (elapsed < 10) {
+                  genProgress.value = Math.min(40, Math.floor(chunkCount / 15));
+                  genStatus.value = '正在生成剧本...';
+                } else {
+                  genProgress.value = Math.min(95, Math.floor(40 + (chunkCount - 15) / 20));
+                  genStatus.value = '正在生成剧本...';
+                }
                 break;
               case 'done':
                 genProgress.value = 100;
+                genStatus.value = '生成完成';
                 await fetchState();
                 break;
               case 'error':
@@ -372,6 +389,7 @@ async function generateScript() {
     }
   } catch (e: any) {
     genError.value = e.message;
+    genStatus.value = '生成失败';
   } finally {
     generating.value = false;
   }
@@ -626,6 +644,10 @@ h1 { text-align: center; color: #eee; }
 .progress-text {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   color: #fff; font-size: 12px; font-weight: bold;
+}
+
+.gen-status {
+  text-align: center; color: #aaa; font-size: 12px; margin-top: 4px;
 }
 
 .player-list-section { margin-bottom: 24px; }
