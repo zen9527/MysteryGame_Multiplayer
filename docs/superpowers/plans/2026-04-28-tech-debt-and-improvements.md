@@ -2,18 +2,19 @@
 
 > **STATUS: ✅ COMPLETED** (2026-04-28)
 >
-> All 11 tasks implemented and verified. 4 commits:
+> All 11 tasks implemented and verified. 5 commits:
 > - `4894545` — Backend: accusation cache, vote broadcast, act transition, SSE end_game, fix blocking calls
 > - `74e7c86` — Spec review fixes: accusation name resolution, end_game text extraction, test LLM mock
 > - `23beac2` — Frontend: act banner, SSE end_game, vote/accusation handlers, UI feedback
 > - `1f8485e` — Fix: per-action loading states connected to AdminPanel via computed adminLoading
+> - `c793403` — Fix: cache private_chat WS messages for reconnect resilience
 >
 > **Drift from plan:**
 > - `cache_accusation` signature changed to include `from_player_name` (spec review fix)
 > - `_end_game_generator` extracts `public_event` text from structured dict (spec review fix)
 > - `test_end_game_by_admin` uses `monkeypatch` to mock LLM (spec review fix — original had unmocked LLM call)
 > - `adminLoading` changed from `ref` to `computed` combining all per-action loading refs (spec review fix)
-> - Plan references "44 passed" but final count is 45 (added `test_cache_accusation`)
+> - Plan references "44 passed" but final count is 46 (added `test_cache_accusation` + `test_cache_private_chat`)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
