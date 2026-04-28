@@ -78,6 +78,7 @@ pytest tests/ -v   # Backend tests (project root is in sys.path via conftest.py)
 - **WS on_connect**: Resends phase_unlock, all cached distributions (role cards, clues, dm_private, accusations — deduplicated to avoid double-send), and last 50 public messages with resolved player names.
 - **Chat display**: Chat messages show `角色名(玩家名)` format (e.g., "林默(张三)"). DM messages show "🎭 DM". Resolved by `_resolve_display_name()` helper in websocket_hub (imported by api_routes).
 - **Chat**: `sendPublicChat` uses WS only — server handles persistence via `manager.add_chat_message`. WS broadcast includes `from_player_id` for deduplication.
+- **Private chat**: `private_chat` WS messages are cached in `distributed_private_chat` for WS reconnect resilience. Both sender and receiver get cached copy via `manager.cache_private_chat()`.
 - **DM auto-opening**: `start_game` triggers `asyncio.create_task(_auto_generate_opening)` background task. DM opening narrative arrives via WS broadcast after LLM generation (10-30s). No frontend changes needed.
 - **DM Chat**: `POST /api/rooms/{gameId}/dm/chat-response` SSE streaming. Player's own message is immediately pushed to `store.privateMessages`. DM reply streamed via SSE, cached via `manager.add_dm_chat_response()`.
 - **request_advance**: WS message, non-blocking via `asyncio.to_thread()`. Frontend shows `requestingClue` loading state, cleared when `event` WS message arrives or 15s timeout.
@@ -93,4 +94,4 @@ pytest tests/ -v   # Backend tests (project root is in sys.path via conftest.py)
 
 ## Known Technical Debt
 
-- **private_chat WS messages**: Not cached for reconnect. If a player disconnects, their private chat history is lost.
+- None currently tracked.

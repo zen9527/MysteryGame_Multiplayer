@@ -398,6 +398,30 @@ class GameManager:
             "reasoning": reasoning,
         })
 
+    def cache_private_chat(self, game_id: str, from_player_id: str, to_player_id: str, content: str):
+        """Cache a private chat message for WS reconnect replay."""
+        if game_id not in self.games:
+            return
+        state = self.games[game_id]
+        # Cache for sender
+        if from_player_id not in state.distributed_private_chat:
+            state.distributed_private_chat[from_player_id] = []
+        state.distributed_private_chat[from_player_id].append({
+            "type": "private_chat",
+            "from": from_player_id,
+            "content": content,
+            "timestamp": "",
+        })
+        # Cache for receiver
+        if to_player_id not in state.distributed_private_chat:
+            state.distributed_private_chat[to_player_id] = []
+        state.distributed_private_chat[to_player_id].append({
+            "type": "private_chat",
+            "from": from_player_id,
+            "content": content,
+            "timestamp": "",
+        })
+
     def get_pending_distributions(self, game_id: str, player_id: str) -> list:
         """Get all cached distribution messages for a player (for WS connect/resend)."""
         if game_id not in self.games:
@@ -407,6 +431,7 @@ class GameManager:
         messages.extend(state.distributed_role_cards.get(player_id, []))
         messages.extend(state.distributed_clues.get(player_id, []))
         messages.extend(state.distributed_dm_private.get(player_id, []))
+        messages.extend(state.distributed_private_chat.get(player_id, []))
         messages.extend(state.distributed_accusations)
         return messages
 

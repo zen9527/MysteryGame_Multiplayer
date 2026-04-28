@@ -397,3 +397,29 @@ def test_cache_accusation(game_manager, sample_script):
     assert accusations[0]["target"] == "张三"
     assert accusations[0]["from"] == "李四"  # player name, not ID
     assert accusations[0]["from_player_id"] == "p2"
+
+
+def test_cache_private_chat(game_manager, sample_script):
+    game_manager.create_game("test-game", "admin")
+    state = game_manager.get_state("test-game")
+    state.script = sample_script
+    from server.models import Player, Role
+    role1 = Role(id="r1", name="张三", age=30, occupation="医生", description="", background="", secret_task="", alibi="", motive="")
+    role2 = Role(id="r2", name="李四", age=25, occupation="教师", description="", background="", secret_task="", alibi="", motive="")
+    state.players["p1"] = Player(id="p1", name="张三", role_id="r1", role=role1)
+    state.players["p2"] = Player(id="p2", name="李四", role_id="r2", role=role2)
+    game_manager.cache_private_chat("test-game", "p1", "p2", "这是一条私信")
+
+    # Check sender has cached message
+    pending_p1 = game_manager.get_pending_distributions("test-game", "p1")
+    private_p1 = [m for m in pending_p1 if m.get("type") == "private_chat"]
+    assert len(private_p1) == 1
+    assert private_p1[0]["from"] == "p1"
+    assert private_p1[0]["content"] == "这是一条私信"
+
+    # Check receiver has cached message
+    pending_p2 = game_manager.get_pending_distributions("test-game", "p2")
+    private_p2 = [m for m in pending_p2 if m.get("type") == "private_chat"]
+    assert len(private_p2) == 1
+    assert private_p2[0]["from"] == "p1"
+    assert private_p2[0]["content"] == "这是一条私信"

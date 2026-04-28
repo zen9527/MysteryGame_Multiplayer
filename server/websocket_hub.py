@@ -97,6 +97,8 @@ class WebSocketHub:
             target = data.get("to_player_id", "")
             content = data.get("content", "")
             manager.add_chat_message(room_id, player_id, content, True, target)
+            # Cache for WS reconnect (both sender and receiver)
+            manager.cache_private_chat(room_id, player_id, target, content)
             # Send to both sender and receiver only
             chat_msg = {
                 "type": "private_chat",
