@@ -212,6 +212,31 @@ class GameManager:
         )
         self.add_message(game_id, msg)
 
+    def add_dm_chat_response(self, game_id: str, player_id: str, player_message: str, dm_reply: str):
+        """Store DM's chat response in private_messages and cache for WS reconnect."""
+        if game_id not in self.games:
+            return
+        state = self.games[game_id]
+
+        # Store DM reply as private message
+        reply_msg = Message(
+            from_player_id="__dm__",
+            content=dm_reply,
+            type="private",
+            to_player_id=player_id,
+        )
+        state.private_messages.append(reply_msg)
+
+        # Cache for WS reconnect
+        if player_id not in state.distributed_dm_private:
+            state.distributed_dm_private[player_id] = []
+        state.distributed_dm_private[player_id].append({
+            "type": "dm_private",
+            "from": "__dm__",
+            "to": player_id,
+            "content": dm_reply,
+        })
+
     def add_accusation(self, game_id: str, accusation: Accusation):
         if game_id in self.games:
             self.games[game_id].accusations.append(accusation)
