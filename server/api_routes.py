@@ -455,45 +455,52 @@ async def start_game(game_id: str):
 
 # --- Admin emergency controls (admin only) ---
 
-@router.post("/api/rooms/{game_id}/dm/push-event")
-async def push_event(game_id: str, req: PushEventRequest):
-    """手动推进剧情（仅管理员）"""
-    import logging
-    log = logging.getLogger(__name__)
+def _push_event_generator(game_id: str, req: PushEventRequest):
+    """SSE generator for DM event generation."""
     state = manager.get_state(game_id)
     if not state:
-        raise HTTPException(status_code=404, detail="Room not found")
+        yield f"data: {{\"type\": \"error\", \"message\": \"Room not found\"}}\n\n"
+        return
     require_admin(req.player_id, game_id)
 
-    # Use LLM to generate next event based on current state
+    log = logging.getLogger(__name__)
+    log.info(f"[push-event-stream] Generating event for {game_id}, act={state.act}, round={state.current_round}")
+
     try:
-        log.info(f"[push-event] Generating event for {game_id}, act={state.act}, round={state.current_round}")
+        yield f"data: {{\"type\": \"start\"}}\n\n"
+
         event = host_dm.generate_event(state)
-        log.info(f"[push-event] Event generated successfully")
+        log.info(f"[push-event-stream] Event generated successfully")
+
         state.current_round += 1
         result = manager.push_structured_event(game_id, event)
 
-        # Broadcast via WebSocket to all connected players
-        from server.websocket_hub import hub
-        if result and result["public_event"]:
-            await hub.broadcast(game_id, {
-                "type": "event",
-                "content": result["public_event"],
-            })
-        if result:
-            for clue in result["private_clues"]:
-                await hub.send_dm_private(
-                    game_id,
-                    clue["player_id"],
-                    clue["content"],
-                )
+        done_payload = json.dumps({
+            "type": "done",
+            "public_event": result["public_event"] if result else "",
+            "private_clues_count": len(result["private_clues"]) if result else 0,
+        }, ensure_ascii=False)
+        yield f"data: {done_payload}\n\n"
 
-        return {"status": "event_pushed", "content": result["public_event"] if result else ""}
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"[push-event] Event generation failed: {type(e).__name__}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"事件生成失败: {type(e).__name__}: {str(e)}")
+        log.error(f"[push-event-stream] Event generation failed: {type(e).__name__}: {e}", exc_info=True)
+        yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
+
+
+@router.post("/api/rooms/{game_id}/dm/push-event")
+async def push_event(game_id: str, req: PushEventRequest):
+    """流式推进剧情（SSE），实时返回生成进度。"""
+    return StreamingResponse(
+        _push_event_generator(game_id, req),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/api/rooms/{game_id}/dm/add-clue")
