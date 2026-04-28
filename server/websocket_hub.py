@@ -116,12 +116,23 @@ class WebSocketHub:
             state = manager.get_state(room_id)
             if state and state.phase in ("playing",):
                 try:
-                    event_content = host_dm.generate_event(state)
-                    manager.push_event(room_id, event_content)
-                    await self.broadcast(room_id, {
-                        "type": "event",
-                        "content": event_content,
-                    })
+                    state.current_round += 1
+                    event = host_dm.generate_event(state)
+                    result = manager.push_structured_event(room_id, event)
+                    if result:
+                        # Broadcast public event
+                        if result["public_event"]:
+                            await self.broadcast(room_id, {
+                                "type": "event",
+                                "content": result["public_event"],
+                            })
+                        # Send private clues to respective players
+                        for clue in result["private_clues"]:
+                            await self.send_dm_private(
+                                room_id,
+                                clue["player_id"],
+                                clue["content"],
+                            )
                 except Exception as e:
                     manager.add_dm_log(room_id, f"事件生成失败: {e}")
 

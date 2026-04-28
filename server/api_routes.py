@@ -468,11 +468,27 @@ async def push_event(game_id: str, req: PushEventRequest):
     # Use LLM to generate next event based on current state
     try:
         log.info(f"[push-event] Generating event for {game_id}, act={state.act}, round={state.current_round}")
-        event_content = host_dm.generate_event(state)
-        log.info(f"[push-event] Event generated successfully, length={len(event_content)}")
+        event = host_dm.generate_event(state)
+        log.info(f"[push-event] Event generated successfully")
         state.current_round += 1
-        manager.push_event(game_id, event_content)
-        return {"status": "event_pushed", "content": event_content}
+        result = manager.push_structured_event(game_id, event)
+
+        # Broadcast via WebSocket to all connected players
+        from server.websocket_hub import hub
+        if result and result["public_event"]:
+            await hub.broadcast(game_id, {
+                "type": "event",
+                "content": result["public_event"],
+            })
+        if result:
+            for clue in result["private_clues"]:
+                await hub.send_dm_private(
+                    game_id,
+                    clue["player_id"],
+                    clue["content"],
+                )
+
+        return {"status": "event_pushed", "content": result["public_event"] if result else ""}
     except HTTPException:
         raise
     except Exception as e:

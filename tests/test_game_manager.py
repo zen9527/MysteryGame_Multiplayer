@@ -1,6 +1,7 @@
 import pytest
 from server.models import Script, Role, Clue, PlotOutline
 from server.game_manager import GameManager
+from server.host_dm import HostDM
 
 
 @pytest.fixture
@@ -266,7 +267,7 @@ def test_unlock_phase(game_manager, sample_script):
     state.script = sample_script
     state.script.clues = [
         Clue(id="c1", title="线索1", content="内容", target_role=None, is_red_herring=False, content_hint="提示",
-             target_player_ids=["角色 A"], unlock_phase="act2"),
+              target_player_ids=["角色 A"], unlock_phase="act2"),
     ]
     state.script.private_events = [
         PrivateEvent(phase="act2", target_role_name="角色 A", content="私信", trigger=None),
@@ -279,3 +280,103 @@ def test_unlock_phase(game_manager, sample_script):
     assert len(result["private_events"]) == 1
     assert state.phase == "playing"  # phase stays "playing", act changes
     assert state.act == 2
+
+
+def test_push_structured_event(game_manager, sample_script):
+    game_manager.create_game("test1", "admin")
+    state = game_manager.get_state("test1")
+    state.script = sample_script
+    game_manager.add_player("test1", "p1", "张三")
+    game_manager.add_player("test1", "p2", "李四")
+    state.current_round = 1
+
+    event = {
+        "public_event": "🌙 月光洒在书房地板上...",
+        "private_clues": [
+            {"role": "角色 A", "content": "你的袖口沾有暗红色污渍"},
+            {"role": "角色 B", "content": "你发现了一颗断裂的珍珠"},
+        ],
+        "dm_instruction": "引导玩家讨论地毯液体来源",
+    }
+    result = game_manager.push_structured_event("test1", event)
+
+    assert result is not None
+    # Public event goes to public_messages
+    assert len(state.public_messages) == 1
+    assert state.public_messages[0].content == "🌙 月光洒在书房地板上..."
+    assert state.public_messages[0].type == "event"
+    # Host history updated
+    assert len(state.host_message_history) == 1
+    # DM instruction goes to dm_log only
+    assert len(state.dm_log) == 1
+    assert "引导玩家讨论地毯液体来源" in state.dm_log[0]
+    # Private clues go to private_messages
+    assert len(state.private_messages) == 2
+    # Check resolved player IDs
+    resolved_pids = [c["player_id"] for c in result["private_clues"]]
+    assert "p1" in resolved_pids
+    assert "p2" in resolved_pids
+
+
+def test_push_structured_event_nonexistent_role(game_manager, sample_script):
+    game_manager.create_game("test1", "admin")
+    state = game_manager.get_state("test1")
+    state.script = sample_script
+    game_manager.add_player("test1", "p1", "张三")
+
+    event = {
+        "public_event": "公共事件",
+        "private_clues": [
+            {"role": "不存在的角色", "content": "这条线索不会被分发"},
+        ],
+        "dm_instruction": "",
+    }
+    result = game_manager.push_structured_event("test1", event)
+
+    assert result is not None
+    assert len(state.public_messages) == 1
+    assert len(state.private_messages) == 0  # No matching role
+    assert len(result["private_clues"]) == 0
+
+
+def test_push_structured_event_empty_public(game_manager, sample_script):
+    game_manager.create_game("test1", "admin")
+    state = game_manager.get_state("test1")
+    state.script = sample_script
+
+    event = {
+        "public_event": "",
+        "private_clues": [],
+        "dm_instruction": "本轮仅投放私信",
+    }
+    result = game_manager.push_structured_event("test1", event)
+
+    assert result is not None
+    assert len(state.public_messages) == 0  # No public message
+    assert len(state.dm_log) == 1  # DM instruction logged
+
+
+# --- HostDM parse_event_response tests ---
+
+
+def test_parse_event_response_valid_json():
+    raw = '{"public_event": "🌙 月光洒在书房地板上...", "private_clues": [{"role": "林默", "content": "你的袖口有污渍"}], "dm_instruction": "引导讨论"}'
+    result = HostDM.parse_event_response(raw)
+    assert result["public_event"] == "🌙 月光洒在书房地板上..."
+    assert len(result["private_clues"]) == 1
+    assert result["private_clues"][0]["role"] == "林默"
+    assert result["dm_instruction"] == "引导讨论"
+
+
+def test_parse_event_response_markdown_block():
+    raw = '```json\n{"public_event": "测试事件", "private_clues": [], "dm_instruction": ""}\n```'
+    result = HostDM.parse_event_response(raw)
+    assert result["public_event"] == "测试事件"
+
+
+def test_parse_event_response_invalid_json_fallback():
+    raw = "这不是JSON，只是普通文本"
+    result = HostDM.parse_event_response(raw)
+    assert result["public_event"] == "这不是JSON，只是普通文本"
+    assert result["private_clues"] == []
+    assert result["dm_instruction"] == ""

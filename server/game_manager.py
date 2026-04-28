@@ -117,6 +117,66 @@ class GameManager:
         state.public_messages.append(msg)
         state.host_message_history.append(event_content)
 
+    def push_structured_event(self, game_id: str, event: dict):
+        """DM推送结构化事件：public_event -> 公屏, private_clues -> 私信, dm_instruction -> DM日志。
+
+        event: {
+            "public_event": str,
+            "private_clues": [{"role": str, "content": str}, ...],
+            "dm_instruction": str,
+        }
+        Returns: {
+            "public_event": str,
+            "private_clues": [{"player_id": str, "content": str}, ...],
+        }
+        """
+        if game_id not in self.games:
+            return None
+        state = self.games[game_id]
+
+        public_event = event.get("public_event", "")
+        private_clues = event.get("private_clues", [])
+        dm_instruction = event.get("dm_instruction", "")
+
+        # Public event -> public_messages + host history
+        if public_event:
+            msg = Message(
+                from_player_id="__dm__",
+                content=public_event,
+                type="event",
+            )
+            state.public_messages.append(msg)
+            state.host_message_history.append(public_event)
+
+        # DM instruction -> DM log only (not visible to players)
+        if dm_instruction:
+            state.dm_log.append(f"[第{state.current_round}轮] {dm_instruction}")
+
+        # Private clues -> match role name to player_id -> private messages
+        resolved_clues = []
+        for clue in private_clues:
+            role_name = clue.get("role", "")
+            content = clue.get("content", "")
+            if not role_name or not content:
+                continue
+            # Find player(s) with this role name
+            for pid, player in state.players.items():
+                if player.role and player.role.name == role_name:
+                    priv_msg = Message(
+                        from_player_id="__dm__",
+                        content=content,
+                        type="private",
+                        to_player_id=pid,
+                    )
+                    state.private_messages.append(priv_msg)
+                    resolved_clues.append({"player_id": pid, "content": content})
+                    break  # One player per role
+
+        return {
+            "public_event": public_event,
+            "private_clues": resolved_clues,
+        }
+
     def add_clue(self, game_id: str, clue_title: str, clue_content: str):
         """管理员追加自定义线索"""
         if game_id not in self.games:

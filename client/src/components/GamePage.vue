@@ -327,20 +327,28 @@ async function submitVote() {
 async function handlePushEvent() {
   adminLoading.value = true;
   try {
+    // LLM can take up to 300s — use AbortController with generous timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 310000);
+
     const res = await fetch(`/api/rooms/${gameId}/dm/push-event`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ player_id: playerId, event_content: '' }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+
     if (res.ok) {
       const data = await res.json();
       currentEvent.value = data.content;
     } else {
       const err = await res.json().catch(() => ({}));
-      alert(`推进剧情失败: ${err.detail || '未知错误'}`);
+      console.error('推进剧情失败:', err.detail || '未知错误');
     }
   } catch (e) {
-    alert('推进剧情失败: 网络错误');
+    // Request timeout or network error — event will still arrive via WS
+    console.warn('推进剧情请求超时/失败（事件将通过WS推送）:', e);
   } finally { adminLoading.value = false; }
 }
 
