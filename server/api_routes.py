@@ -100,7 +100,6 @@ class AdminActionRequest(BaseModel):
 
 class PushEventRequest(BaseModel):
     player_id: str
-    event_content: str
 
 
 class AddClueRequest(BaseModel):
@@ -457,13 +456,11 @@ async def start_game(game_id: str):
 
 # --- Admin emergency controls (admin only) ---
 
-def _push_event_generator(game_id: str, req: PushEventRequest):
+def _push_event_generator(game_id: str, state):
     """SSE generator for DM event generation."""
-    state = manager.get_state(game_id)
-    if not state:
-        yield f"data: {{\"type\": \"error\", \"message\": \"Room not found\"}}\n\n"
+    if state.phase != "playing":
+        yield f"data: {{\"type\": \"error\", \"message\": \"只能在游戏进行中推进剧情\"}}\n\n"
         return
-    require_admin(req.player_id, game_id)
 
     log.info(f"[push-event-stream] Generating event for {game_id}, act={state.act}, round={state.current_round}")
 
@@ -483,8 +480,6 @@ def _push_event_generator(game_id: str, req: PushEventRequest):
         }, ensure_ascii=False)
         yield f"data: {done_payload}\n\n"
 
-    except HTTPException:
-        raise
     except Exception as e:
         log.error(f"[push-event-stream] Event generation failed: {type(e).__name__}: {e}", exc_info=True)
         yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
@@ -493,8 +488,13 @@ def _push_event_generator(game_id: str, req: PushEventRequest):
 @router.post("/api/rooms/{game_id}/dm/push-event")
 async def push_event(game_id: str, req: PushEventRequest):
     """流式推进剧情（SSE），实时返回生成进度。"""
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+
     return StreamingResponse(
-        _push_event_generator(game_id, req),
+        _push_event_generator(game_id, state),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
