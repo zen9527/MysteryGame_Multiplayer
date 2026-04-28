@@ -731,12 +731,18 @@ def _end_game_generator(game_id: str, state):
     try:
         yield f"data: {{\"type\": \"start\"}}\n\n"
 
-        reveal_content = host_dm.generate_event(state)
-        manager.push_event(game_id, f"📢 真相揭晓：{reveal_content}")
+        reveal_result = host_dm.generate_event(state)
+        # generate_event returns a structured dict — extract public narrative text
+        reveal_text = reveal_result.get("public_event", str(reveal_result)) if isinstance(reveal_result, dict) else str(reveal_result)
+        manager.push_event(game_id, f"📢 真相揭晓：{reveal_text}")
+
+        # Also push structured private clues (if any) for game end reveals
+        if isinstance(reveal_result, dict) and reveal_result.get("private_clues"):
+            manager.push_structured_event(game_id, reveal_result)
 
         done_payload = json.dumps({
             "type": "done",
-            "content": reveal_content,
+            "content": reveal_text,
         }, ensure_ascii=False)
         yield f"data: {done_payload}\n\n"
 

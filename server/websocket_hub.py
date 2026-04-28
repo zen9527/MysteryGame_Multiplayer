@@ -106,7 +106,7 @@ class WebSocketHub:
             player_name = player_id
             if state and player_id in state.players:
                 player_name = state.players[player_id].name
-            manager.cache_accusation(room_id, player_id, target, reasoning)
+            manager.cache_accusation(room_id, player_name, player_id, target, reasoning)
             await self.broadcast(room_id, {
                 "type": "accusation",
                 "from": player_name,

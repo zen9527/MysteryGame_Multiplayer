@@ -385,14 +385,15 @@ class GameManager:
                 "content": content,
             })
 
-    def cache_accusation(self, game_id: str, from_player_id: str, target: str, reasoning: str):
+    def cache_accusation(self, game_id: str, from_player_name: str, from_player_id: str, target: str, reasoning: str):
         """Cache an accusation for WS reconnect replay."""
         if game_id not in self.games:
             return
         state = self.games[game_id]
         state.distributed_accusations.append({
             "type": "accusation",
-            "from": from_player_id,
+            "from": from_player_name,
+            "from_player_id": from_player_id,
             "target": target,
             "reasoning": reasoning,
         })

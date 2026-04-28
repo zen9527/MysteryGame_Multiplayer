@@ -100,7 +100,13 @@ def test_force_trial_by_non_admin_fails():
     assert response.status_code == 403
 
 
-def test_end_game_by_admin():
+def test_end_game_by_admin(monkeypatch):
+    # Mock LLM to avoid real API calls in integration tests
+    monkeypatch.setattr(
+        "server.host_dm.host.generate_event",
+        lambda state: {"public_event": "真相揭晓", "private_clues": [], "dm_instruction": ""},
+    )
+
     resp = client.post("/api/rooms", json={"creator_id": "admin_1"})
     game_id = resp.json()["game_id"]
     from server.game_manager import manager
