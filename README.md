@@ -76,7 +76,7 @@ npm run dev
 │   │   ├── stores/game.ts     # Pinia 状态管理（角色卡、私信、线索、公聊、去重）
 │   │   ├── types/ws.ts        # WebSocket 类型定义
 │   │   ├── utils/ws.ts        # WebSocketManager（已废弃 — GamePage 使用直连 WS）
-│   │   └── components/        # 11 个组件
+│   │   └── components/        # 12 个组件
 │   │       ├── GamePage.vue           # 主游戏页面（左：公聊/事件，右：Tab 导航）
 │   │       ├── RoleCard.vue           # 角色卡（分层解锁 + 折叠）
 │   │       ├── PrivateChatPanel.vue   # DM 私信面板
@@ -117,5 +117,5 @@ npm test
 ---
 
 **作者**: Flex  
-**版本**: v5.0.0  
-**最近更新**: 信息隔离系统 + 断线重连 + 聊天去重
+**版本**: v6.0.0  
+**最近更新**: DM 私信流式对话 + 推进幕次 + 线索分发修复 + WS 重连缓存补全

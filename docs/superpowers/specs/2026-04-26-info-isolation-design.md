@@ -1,3 +1,5 @@
+> ⚠️ **STATUS: IMPLEMENTED** — This design spec has been fully implemented with the noted deviations. See CLAUDE.md for current architecture.
+
 # 剧本杀 — 信息隔离与角色卡重构设计
 
 ## 问题

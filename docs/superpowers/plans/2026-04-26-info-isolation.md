@@ -1,3 +1,13 @@
+> ⚠️ **STATUS: COMPLETED** — This plan was fully implemented. The codebase has since evolved:
+> - `clues` uses `Array<ClueData>` not `Map`
+> - `activeTab` is in Pinia store
+> - `seenMessageKeys` / `seenPrivateKeys` Sets added for dedup
+> - `loadPublicMessagesFromAPI()` added for HTTP→WS message merge
+> - `player_id` (UUID) used as key, not `player_name`
+> - `private_chat` WS messages still not cached for reconnect (known debt)
+> - `accusation` WS handler is a no-op in store (known debt)
+> See CLAUDE.md for current architecture.
+
 # Info Isolation & Role Card Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

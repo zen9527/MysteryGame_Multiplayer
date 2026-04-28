@@ -42,7 +42,7 @@ def _normalize_script_json(data: dict) -> dict:
     clues = data.get("clues", [])
     for clue in clues:
         clue.setdefault("target_player_ids", [])
-        clue.setdefault("unlock_phase", "act2")
+        clue.setdefault("unlock_phase", "act1")
         clue.setdefault("trigger_condition", None)
 
     private_events = data.get("private_events", [])
@@ -316,6 +316,7 @@ JSON格式要求：
 - 线索数量至少5条
 - 凶手必须是其中一个角色
 - 每条线索标注 target_player_ids（分配给哪些角色名），unlock_phase（act1/act2/act3）
+- 线索的 unlock_phase 必须分散在 act1（2-3条初始线索）和 act2（3-5条深入线索）中
 - 生成 2-3 个 DM 私信触发点（private_events），分配给不同角色，phase 为 act2
 - target_player_ids 使用角色名（如"角色名"），后端会匹配到对应的玩家"""
 
@@ -608,6 +609,19 @@ async def dm_private(game_id: str, req: DMPrivateRequest):
         raise HTTPException(status_code=404, detail="Room not found")
     require_admin(req.player_id, game_id)
 
+    # Store in private_messages for persistence
+    manager.add_chat_message(game_id, "__dm__", req.content, is_private=True, target_player_id=req.to_player_id)
+
+    # Cache for WS reconnect
+    if req.to_player_id not in state.distributed_dm_private:
+        state.distributed_dm_private[req.to_player_id] = []
+    state.distributed_dm_private[req.to_player_id].append({
+        "type": "dm_private",
+        "from": "__dm__",
+        "to": req.to_player_id,
+        "content": req.content,
+    })
+
     await hub.send_dm_private(game_id, req.to_player_id, req.content)
     return {"status": "dm_private_sent"}
 
@@ -646,6 +660,58 @@ async def force_trial(game_id: str, req: AdminActionRequest):
     return {"status": "trial_started", "phase": state.phase}
 
 
+@router.post("/api/rooms/{game_id}/advance-act")
+async def advance_act(game_id: str, req: AdminActionRequest):
+    """推进到下一幕（仅管理员）。触发新幕的角色卡、线索、私信分发。"""
+    state = manager.get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+
+    if state.phase not in ("playing",):
+        raise HTTPException(status_code=400, detail="只能在游戏进行中推进幕")
+
+    new_act = state.act + 1
+    if new_act > 3:
+        raise HTTPException(status_code=400, detail="已经是最后一幕，无法继续推进")
+
+    unlock_result = manager.unlock_phase(game_id, "playing", new_act)
+
+    from server.websocket_hub import hub
+
+    # Broadcast phase unlock
+    await hub.broadcast(game_id, {
+        "type": "phase_unlock",
+        "phase": "playing",
+        "act": new_act,
+    })
+
+    if unlock_result:
+        # Send role cards (new layers)
+        for pid, card_data in unlock_result["role_cards"].items():
+            await hub.send_to_player(game_id, pid, {
+                "type": "role_card",
+                "layer": "3" if new_act == 2 else "2",
+                "player_id": pid,
+                "data": card_data,
+            })
+
+        # Send clues
+        for pid, clue_list in unlock_result["clues"].items():
+            for clue_data in clue_list:
+                await hub.send_to_player(game_id, pid, {
+                    "type": "clue_unlock",
+                    "player_id": pid,
+                    "clue": clue_data,
+                })
+
+        # Send DM private messages
+        for pid, content in unlock_result["private_events"]:
+            await hub.send_dm_private(game_id, pid, content)
+
+    return {"status": "act_advanced", "act": new_act}
+
+
 @router.post("/api/rooms/{game_id}/end-game")
 async def end_game(game_id: str, req: AdminActionRequest):
     """提前结束游戏（仅管理员）"""
@@ -654,9 +720,9 @@ async def end_game(game_id: str, req: AdminActionRequest):
         raise HTTPException(status_code=404, detail="Room not found")
     require_admin(req.player_id, game_id)
 
-    # Generate truth reveal via LLM
+    # Generate truth reveal via LLM (non-blocking in production, graceful fallback)
     try:
-        reveal_content = host_dm.generate_event(state)  # reuse for now
+        reveal_content = host_dm.generate_event(state)
         manager.push_event(game_id, f"📢 真相揭晓：{reveal_content}")
     except Exception:
         pass

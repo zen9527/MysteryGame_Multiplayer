@@ -1,3 +1,5 @@
+> ⚠️ **STATUS: COMPLETED** — This plan was fully implemented. SSE push-event now streams via StreamingResponse. Progress bar uses time-based logic with status text. See CLAUDE.md for current state.
+
 # Push-Event Streaming & Progress Bar Improvement Plan
 
 > **For agentic workers:** Use superpowers:subagent-driven-development to implement task-by-task.

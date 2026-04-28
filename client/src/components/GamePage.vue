@@ -83,7 +83,9 @@
             <!-- Action Buttons -->
             <div v-if="phase === 'playing'" class="actions-section">
               <h2>⚡ 操作</h2>
-              <button @click="requestClue" :disabled="phase !== 'playing'">请求线索</button>
+              <button @click="requestClue" :disabled="phase !== 'playing' || requestingClue">
+                {{ requestingClue ? '⏳ 请求中...' : '请求线索' }}
+              </button>
               <button @click="showAccusation = true" :disabled="phase !== 'playing'">开始指控</button>
             </div>
 
@@ -129,6 +131,7 @@
               :loading="adminLoading"
               :dm-log="dmLog"
               @push-event="handlePushEvent"
+              @advance-act="handleAdvanceAct"
               @force-trial="handleForceTrial"
               @end-game="handleEndGame"
               @add-clue="handleAddClue"
@@ -200,6 +203,9 @@ const voteReasoning = ref('');
 
 // Admin loading state
 const adminLoading = ref(false);
+
+// Player action loading state
+const requestingClue = ref(false);
 
 // WebSocket
 let ws: WebSocket | null = null;
@@ -273,6 +279,11 @@ function connectWebSocket() {
     // Route through store for state management
     store.handleWSMessage(msg as any);
 
+    // Clear requestingClue when an event comes back from DM
+    if (msg.type === 'event') {
+      requestingClue.value = false;
+    }
+
     // Scroll to bottom for any chat/event messages
     if (msg.type === 'chat' || msg.type === 'event') {
       nextTick(() => {
@@ -306,7 +317,12 @@ async function sendPublicChat() {
 }
 
 async function requestClue() {
+  if (requestingClue.value) return;
+  requestingClue.value = true;
   sendWSMessage('request_advance');
+  // The server will generate an event and broadcast it via WS.
+  // Auto-reset loading after 15 seconds (LLM may take a while but will broadcast when done).
+  setTimeout(() => { requestingClue.value = false; }, 15000);
 }
 
 async function submitAccusation() {
@@ -411,6 +427,25 @@ async function handleAddClue(clue: { title: string; content: string }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ player_id: playerId, clue_title: clue.title, clue_content: clue.content }),
     });
+  } catch (e) { console.error(e); }
+}
+
+async function handleAdvanceAct() {
+  if (!confirm(`确定要推进到第${act.value + 1}幕吗？这将解锁新的角色卡、线索和私信。`)) return;
+  try {
+    const res = await fetch(`/api/rooms/${gameId}/advance-act`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ player_id: playerId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.detail || '推进失败');
+    } else {
+      const data = await res.json();
+      console.log(`[advance-act] Now at act ${data.act}`);
+      fetchState();
+    }
   } catch (e) { console.error(e); }
 }
 

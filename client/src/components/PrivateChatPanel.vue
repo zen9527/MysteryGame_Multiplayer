@@ -65,6 +65,19 @@ async function sendDMPrivate() {
   pendingReply.value = '';
   newMessage.value = '';
 
+  // Immediately show player's own message in the chat
+  const playerEntry = Array.from(store.players.entries()).find(([pid]) => pid === playerId);
+  const playerName = playerEntry ? playerEntry[1].name : '你';
+  store.privateMessages.push({
+    from: playerName,
+    content: text,
+    timestamp: '',
+  });
+  await nextTick();
+  if (messageContainer.value) {
+    messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
+  }
+
   try {
     const res = await fetch(`/api/rooms/${gameId}/dm/chat-response`, {
       method: 'POST',

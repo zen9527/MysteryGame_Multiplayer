@@ -1,5 +1,6 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Dict
+import asyncio
 import json
 from server.game_manager import manager
 from server.host_dm import host as host_dm
@@ -115,9 +116,10 @@ class WebSocketHub:
             # Player requests DM to advance — trigger LLM event generation
             state = manager.get_state(room_id)
             if state and state.phase in ("playing",):
+                # Run blocking LLM call in a thread to avoid blocking the event loop
                 try:
                     state.current_round += 1
-                    event = host_dm.generate_event(state)
+                    event = await asyncio.to_thread(host_dm.generate_event, state)
                     result = manager.push_structured_event(room_id, event)
                     if result:
                         # Broadcast public event
@@ -154,15 +156,11 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, player_id: str)
             "act": state.act,
         })
 
-        # Resend cached role card layer 1 (from script generation or game start)
+        # Resend cached role card layer 1 if not yet in distribution cache
         if player_id in state.players:
             player = state.players[player_id]
-            # First send from cache (set_script or start_game cached it)
             cached = state.distributed_role_cards.get(player_id, [])
-            for msg in cached:
-                if msg.get("layer") == "1":
-                    await hub.send_to_player(room_id, player_id, msg)
-            # Also send from current role if not in cache
+            # Only send directly if not in cache (get_pending_distributions handles cached ones)
             if player.role and not any(m.get("layer") == "1" for m in cached):
                 await hub.send_to_player(room_id, player_id, {
                     "type": "role_card",

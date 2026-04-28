@@ -6,6 +6,9 @@
       <button @click="$emit('push-event')" :disabled="loading" class="action-btn advance">
         ⏭️ {{ loading ? '生成中...' : '推进剧情' }}
       </button>
+      <button @click="$emit('advance-act')" :disabled="loading" class="action-btn next-act">
+        📖 推进下一幕
+      </button>
       <button @click="showClueInput = true" class="action-btn clue">🔍 追加线索</button>
       <button @click="$emit('force-trial')" class="action-btn trial">⚖️ 强制审判</button>
       <button @click="$emit('end-game')" class="action-btn end">🛑 提前结束</button>
@@ -40,7 +43,7 @@ defineProps<{
   dmLog: string[];
 }>();
 
-const emit = defineEmits(['push-event', 'force-trial', 'end-game', 'add-clue']);
+const emit = defineEmits(['push-event', 'advance-act', 'force-trial', 'end-game', 'add-clue']);
 
 const showClueInput = ref(false);
 const clueTitle = ref('');
@@ -69,6 +72,7 @@ function submitClue() {
   padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; color: #fff;
 }
 .action-btn.advance { background: #0f3460; }
+.action-btn.next-act { background: #8e44ad; }
 .action-btn.clue { background: #2980b9; }
 .action-btn.trial { background: #d35400; }
 .action-btn.end { background: #c0392b; }

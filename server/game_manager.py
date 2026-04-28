@@ -170,6 +170,17 @@ class GameManager:
                     )
                     state.private_messages.append(priv_msg)
                     resolved_clues.append({"player_id": pid, "content": content})
+
+                    # Cache for WS reconnect
+                    if pid not in state.distributed_dm_private:
+                        state.distributed_dm_private[pid] = []
+                    state.distributed_dm_private[pid].append({
+                        "type": "dm_private",
+                        "from": "__dm__",
+                        "to": pid,
+                        "content": content,
+                    })
+
                     break  # One player per role
 
         return {

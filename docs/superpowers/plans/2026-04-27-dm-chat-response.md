@@ -1,3 +1,12 @@
+> ⚠️ **STATUS: COMPLETED** — This plan was fully implemented with deviations:
+> - `chat_stream` uses shared `_stream_chat()` helper (not standalone), `timeout=300`
+> - `respond_to_chat` + `respond_to_chat_stream` use shared `_build_chat_prompt()` helper
+> - `DM_CHAT_SYSTEM_PROMPT` is a class constant, sender name resolution uses player names
+> - Endpoint uses player-identity check (not admin-only), 30s rate limiting per player
+> - Player's own message immediately pushed to `store.privateMessages` before SSE stream
+> - `seenPrivateKeys` Set for dedup, `distributed_dm_private` cache for reconnect
+> See CLAUDE.md for current architecture.
+
 # DM Chat Response Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
