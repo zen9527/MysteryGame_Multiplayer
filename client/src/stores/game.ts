@@ -188,6 +188,47 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  // Game actions - these would call API endpoints
+  async function startGame() {
+    // Implementation would call /api/rooms/{gameId}/start
+    console.log('Start game action');
+  }
+
+  async function advanceAct() {
+    // Implementation would call /api/rooms/{gameId}/advance-act
+    console.log('Advance act action');
+  }
+
+  async function forceTrial() {
+    // Implementation would call /api/rooms/{gameId}/force-trial
+    console.log('Force trial action');
+  }
+
+  async function endGame() {
+    // Implementation would call /api/rooms/{gameId}/end-game
+    console.log('End game action');
+  }
+
+  async function sendPublicChat(content: string) {
+    // Implementation would use WebSocket to send chat message
+    console.log('Send public chat:', content);
+  }
+
+  async function submitAccusation(targetId: string, reasoning: string) {
+    // Implementation would use WebSocket to send accusation
+    console.log('Submit accusation:', targetId, reasoning);
+  }
+
+  async function castVote(targetId: string) {
+    // Implementation would use WebSocket to send vote
+    console.log('Cast vote:', targetId);
+  }
+
+  async function requestAdvance() {
+    // Implementation would use WebSocket to request advance
+    console.log('Request advance');
+  }
+
   return {
     phase,
     act,
@@ -202,5 +243,13 @@ export const useGameStore = defineStore('game', () => {
     actBanner,
     handleWSMessage,
     loadPublicMessagesFromAPI,
+    startGame,
+    advanceAct,
+    forceTrial,
+    endGame,
+    sendPublicChat,
+    submitAccusation,
+    castVote,
+    requestAdvance,
   };
 });
