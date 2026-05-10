@@ -80,8 +80,7 @@ npm test           # vitest run
 pytest tests/ -v   # Backend tests (project root is in sys.path via conftest.py)
 
 # Quick Start
-.\start.ps1   # Start both servers
-.\stop.ps1    # Stop both servers
+Double-click: start.bat / stop.bat
 ```
 
 ## Configuration
