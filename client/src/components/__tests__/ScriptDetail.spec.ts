@@ -27,6 +27,7 @@ describe('ScriptDetail', () => {
     });
 
     await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
     
     expect(wrapper.text()).toContain('Test Script');
     expect(wrapper.text()).toContain('角色 A');
@@ -68,6 +69,7 @@ describe('ScriptDetail', () => {
       props: { scriptId: '1' }
     });
 
+    await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
     
     expect(wrapper.text()).toContain('加载剧本失败');
