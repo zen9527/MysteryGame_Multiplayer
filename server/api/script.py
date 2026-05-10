@@ -158,7 +158,7 @@ JSON 格式要求：
         yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
 
 
-@router.post("/api/rooms/{game_id}/generate-script")
+@router.post("/rooms/{game_id}/generate-script")
 async def generate_script(game_id: str, req: ScriptGenerationRequest):
     """流式生成剧本，通过 SSE 实时返回进度。"""
     return StreamingResponse(
@@ -172,7 +172,7 @@ async def generate_script(game_id: str, req: ScriptGenerationRequest):
     )
 
 
-@router.post("/api/rooms/{game_id}/set-script")
+@router.post("/rooms/{game_id}/set-script")
 async def set_script(game_id: str, req: ScriptGenerationRequest):
     """手动设置剧本（管理员编辑后保存）"""
     state = _get_manager().get_state(game_id)

@@ -16,7 +16,7 @@ class ChatMessageRequest(BaseModel):
     target_player_id: str | None = None
 
 
-@router.post("/api/rooms/{game_id}/chat")
+@router.post("/rooms/{game_id}/chat")
 async def send_message(game_id: str, req: ChatMessageRequest):
     state = _get_manager().get_state(game_id)
     if not state:

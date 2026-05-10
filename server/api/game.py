@@ -26,7 +26,7 @@ class AdminActionRequest(BaseModel):
     player_id: str  # 管理员 ID，用于权限校验
 
 
-@router.post("/api/rooms/{game_id}/start")
+@router.post("/rooms/{game_id}/start")
 async def start_game(game_id: str):
     state = _get_manager().get_state(game_id)
     if not state:
@@ -141,7 +141,7 @@ def _push_event_generator(game_id: str, state):
         yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
 
 
-@router.post("/api/rooms/{game_id}/dm/push-event")
+@router.post("/rooms/{game_id}/dm/push-event")
 async def push_event(game_id: str, req: AdminActionRequest):
     """流式推进剧情（SSE），实时返回生成进度。"""
     state = _get_manager().get_state(game_id)
@@ -160,7 +160,7 @@ async def push_event(game_id: str, req: AdminActionRequest):
     )
 
 
-@router.post("/api/rooms/{game_id}/advance-act")
+@router.post("/rooms/{game_id}/advance-act")
 async def advance_act(game_id: str, req: AdminActionRequest):
     """推进到下一幕（仅管理员）。触发新幕的角色卡、线索、私信分发。"""
     state = _get_manager().get_state(game_id)
@@ -216,7 +216,7 @@ async def advance_act(game_id: str, req: AdminActionRequest):
     return {"status": "act_advanced", "act": new_act}
 
 
-@router.post("/api/rooms/{game_id}/force-trial")
+@router.post("/rooms/{game_id}/force-trial")
 async def force_trial(game_id: str, req: AdminActionRequest):
     """强制进入审判（仅管理员）"""
     state = _get_manager().get_state(game_id)
@@ -252,7 +252,7 @@ def _end_game_generator(game_id: str, state):
         _get_manager().end_game(game_id)
 
 
-@router.post("/api/rooms/{game_id}/end-game")
+@router.post("/rooms/{game_id}/end-game")
 async def end_game(game_id: str, req: AdminActionRequest):
     """流式结束游戏（SSE），实时揭晓真相。"""
     state = _get_manager().get_state(game_id)

@@ -42,7 +42,7 @@ class CreateRoomRequest(BaseModel):
 
 # --- Room CRUD endpoints ---
 
-@router.post("/api/rooms")
+@router.post("/rooms")
 async def create_room(req: CreateRoomRequest):
     game_id = str(uuid.uuid4())
     _get_manager().create_game(game_id, req.creator_id)
@@ -50,7 +50,7 @@ async def create_room(req: CreateRoomRequest):
     return {"game_id": game_id}
 
 
-@router.get("/api/rooms")
+@router.get("/rooms")
 async def list_rooms():
     return [
         {
@@ -65,7 +65,7 @@ async def list_rooms():
     ]
 
 
-@router.get("/api/rooms/{game_id}")
+@router.get("/rooms/{game_id}")
 async def get_room(game_id: str):
     state = _get_manager().get_state(game_id)
     if not state:
@@ -109,7 +109,7 @@ async def get_room(game_id: str):
     }
 
 
-@router.delete("/api/rooms/{game_id}")
+@router.delete("/rooms/{game_id}")
 async def delete_room(game_id: str):
     if game_id in _get_manager().games:
         del _get_manager().games[game_id]
@@ -118,7 +118,7 @@ async def delete_room(game_id: str):
 
 # --- Player management endpoints ---
 
-@router.post("/api/rooms/{game_id}/players")
+@router.post("/rooms/{game_id}/players")
 async def add_player(game_id: str, req: PlayerJoinRequest):
     state = _get_manager().get_state(game_id)
     if not state:
@@ -134,7 +134,7 @@ async def add_player(game_id: str, req: PlayerJoinRequest):
     return {"player_id": player.id, "name": player.name, "role_id": player.role_id}
 
 
-@router.get("/api/rooms/{game_id}/players")
+@router.get("/rooms/{game_id}/players")
 async def list_players(game_id: str):
     state = _get_manager().get_state(game_id)
     if not state:
@@ -149,7 +149,7 @@ class AdminActionRequest(BaseModel):
     player_id: str  # 管理员 ID，用于权限校验
 
 
-@router.post("/api/rooms/{game_id}/players/{target_pid}/kick")
+@router.post("/rooms/{game_id}/players/{target_pid}/kick")
 async def kick_player(game_id: str, target_pid: str, req: AdminActionRequest):
     """踢出玩家（仅管理员）"""
     state = _get_manager().get_state(game_id)
@@ -169,7 +169,7 @@ async def kick_player(game_id: str, target_pid: str, req: AdminActionRequest):
     return {"status": "kicked", "target_player_id": target_pid}
 
 
-@router.post("/api/rooms/{game_id}/leave")
+@router.post("/rooms/{game_id}/leave")
 async def leave_room(game_id: str, req: PlayerJoinRequest):
     """玩家离开房间"""
     state = _get_manager().get_state(game_id)
@@ -191,7 +191,7 @@ async def leave_room(game_id: str, req: PlayerJoinRequest):
     return {"status": "left", "player_id": req.player_id}
 
 
-@router.get("/api/genres")
+@router.get("/genres")
 async def list_genres():
     """返回可用的剧本类型列表"""
     return {"genres": GENRES, "difficulties": DIFFICULTIES}

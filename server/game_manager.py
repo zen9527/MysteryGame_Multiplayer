@@ -494,4 +494,31 @@ class GameManager:
         }
 
 
-manager = GameManager()
+def _get_manager() -> GameManager:
+    """Get GameManager instance - uses DI container if registered, else singleton"""
+    try:
+        from server.di import container
+        # Check if service is registered
+        if "game_manager" in container._services:
+            return container.resolve("game_manager")
+    except (ImportError, ValueError):
+        pass
+    
+    # Fall back to module singleton
+    global _singleton_manager
+    if _singleton_manager is None:
+        _singleton_manager = GameManager()
+    return _singleton_manager
+
+# Module-level singleton (fallback when DI not available)
+_singleton_manager: GameManager | None = None
+
+class _ManagerDelegate:
+    """Delegate that forwards all attribute access to _get_manager()"""
+    def __getattr__(self, name):
+        return getattr(_get_manager(), name)
+    
+    def __repr__(self):
+        return repr(_get_manager())
+
+manager = _ManagerDelegate()

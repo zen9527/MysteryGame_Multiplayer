@@ -22,13 +22,13 @@ class LLMConfigRequest(BaseModel):
     api_key: Optional[str] = None
 
 
-@router.get("/api/llm-config")
+@router.get("/llm-config")
 async def get_llm_config():
     """获取当前 LLM 配置（api_key 脱敏）"""
     return _get_host_dm().llm.get_config()
 
 
-@router.post("/api/llm-config")
+@router.post("/llm-config")
 async def update_llm_config(req: LLMConfigRequest):
     """更新 LLM 配置（运行时生效，不持久化到 .env）"""
     _get_host_dm().llm.set_runtime_config(
@@ -39,7 +39,7 @@ async def update_llm_config(req: LLMConfigRequest):
     return {"status": "updated", **_get_host_dm().llm.get_config()}
 
 
-@router.post("/api/test-llm")
+@router.post("/test-llm")
 async def test_llm(req: Optional[LLMConfigRequest] = None):
     """测试 LLM 连接。可传入可选配置进行临时测试（不保存）。"""
     orig_endpoint = _get_host_dm().llm.endpoint
@@ -78,7 +78,7 @@ async def test_llm(req: Optional[LLMConfigRequest] = None):
         )
 
 
-@router.get("/api/llm-models")
+@router.get("/llm-models")
 async def list_llm_models():
     """获取 LLM 提供商可用的模型列表"""
     try:
@@ -88,7 +88,7 @@ async def list_llm_models():
         return {"models": [], "error": str(e)}
 
 
-@router.get("/api/health")
+@router.get("/health")
 async def health_check():
     # manager replaced with DI
     return {"status": "ok", "games_count": len(_get_manager().games)}

@@ -22,7 +22,7 @@ class VoteRequest(BaseModel):
     reasoning: str
 
 
-@router.post("/api/rooms/{game_id}/accusations")
+@router.post("/rooms/{game_id}/accusations")
 async def add_accusation(game_id: str, req: AccusationRequest):
     state = _get_manager().get_state(game_id)
     if not state:
@@ -36,7 +36,7 @@ async def add_accusation(game_id: str, req: AccusationRequest):
     return {"status": "accusation recorded"}
 
 
-@router.post("/api/rooms/{game_id}/votes")
+@router.post("/rooms/{game_id}/votes")
 async def add_vote(game_id: str, req: VoteRequest):
     state = _get_manager().get_state(game_id)
     if not state:
@@ -50,7 +50,7 @@ async def add_vote(game_id: str, req: VoteRequest):
     return {"status": "vote recorded"}
 
 
-@router.get("/api/rooms/{game_id}/consensus")
+@router.get("/rooms/{game_id}/consensus")
 async def check_consensus(game_id: str):
     state = _get_manager().get_state(game_id)
     if not state:

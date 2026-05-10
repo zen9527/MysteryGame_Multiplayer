@@ -41,7 +41,7 @@ class ChatResponseRequest(BaseModel):
     content: str = Field(min_length=1, max_length=500)
 
 
-@router.post("/api/rooms/{game_id}/dm/add-clue")
+@router.post("/rooms/{game_id}/dm/add-clue")
 async def add_clue(game_id: str, req: AddClueRequest):
     """追加自定义线索（仅管理员）"""
     state = _get_manager().get_state(game_id)
@@ -54,7 +54,7 @@ async def add_clue(game_id: str, req: AddClueRequest):
     return {"status": "clue_added"}
 
 
-@router.post("/api/rooms/{game_id}/dm/private")
+@router.post("/rooms/{game_id}/dm/private")
 async def dm_private(game_id: str, req: DMPrivateRequest):
     """DM 向特定玩家发送私信（仅管理员）"""
     state = _get_manager().get_state(game_id)
@@ -110,7 +110,7 @@ def _chat_response_generator(game_id: str, player_id: str, player_message: str, 
         yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
 
 
-@router.post("/api/rooms/{game_id}/dm/chat-response")
+@router.post("/rooms/{game_id}/dm/chat-response")
 async def chat_response(game_id: str, req: ChatResponseRequest):
     """流式 DM 私信回复（SSE），实时返回生成进度。"""
     state = _get_manager().get_state(game_id)
@@ -132,7 +132,7 @@ async def chat_response(game_id: str, req: ChatResponseRequest):
     )
 
 
-@router.get("/api/rooms/{game_id}/dm/log")
+@router.get("/rooms/{game_id}/dm/log")
 async def get_dm_log(game_id: str):
     """获取 DM 推理日志"""
     state = _get_manager().get_state(game_id)
