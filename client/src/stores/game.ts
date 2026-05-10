@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { WSMessage } from '../types/ws';
+import { ACT_BANNER_DISMISS_MS } from '../constants';
 
 export interface RoleCardData {
   name?: string;
@@ -155,7 +156,7 @@ export const useGameStore = defineStore('game', () => {
           if (actBanner.value && actBanner.value.act === msg.act) {
             actBanner.value = null;
           }
-        }, 8000);
+        }, ACT_BANNER_DISMISS_MS);
         break;
       case 'phase_unlock':
         if (VALID_PHASES.includes(msg.phase as ValidPhase)) {

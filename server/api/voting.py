@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 from server.models import Vote, Accusation
 from server.di import container
+from server.utils.validation import AccusationRequest, VoteRequest, sanitize_string
 
 router = APIRouter()
 
@@ -10,20 +10,12 @@ def _get_manager():
     return container.resolve("game_manager")
 
 
-class AccusationRequest(BaseModel):
-    from_player_id: str
-    target_role_name: str
-    reasoning: str
-
-
-class VoteRequest(BaseModel):
-    from_player_id: str
-    target_role_name: str
-    reasoning: str
-
-
 @router.post("/rooms/{game_id}/accusations")
 async def add_accusation(game_id: str, req: AccusationRequest):
+    req.target_role_name = sanitize_string(req.target_role_name)
+    req.reasoning = sanitize_string(req.reasoning)
+    if not req.target_role_name or not req.reasoning:
+        raise HTTPException(status_code=400, detail="指控目标和理由不能为空")
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
@@ -38,6 +30,7 @@ async def add_accusation(game_id: str, req: AccusationRequest):
 
 @router.post("/rooms/{game_id}/votes")
 async def add_vote(game_id: str, req: VoteRequest):
+    req.target_role_name = sanitize_string(req.target_role_name)
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")

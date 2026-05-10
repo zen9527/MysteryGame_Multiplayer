@@ -1,4 +1,10 @@
 from server.models import GameState, Player, Script, Message, Accusation, Vote, Clue, PlotOutline
+from server.constants import (
+    MAX_PLAYERS_PER_ROOM,
+    CONSENSUS_THRESHOLD,
+    VALID_PHASES,
+    ACT_UNLOCK_MAP,
+)
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -44,8 +50,8 @@ class GameManager:
             state.players[player_id] = player
             return player
         # Count all players to assign roles correctly
-        if len(state.players) >= len(state.script.roles):
-            return None  # 房间已满
+        if len(state.players) >= min(len(state.script.roles), MAX_PLAYERS_PER_ROOM):
+            return None
         role = state.script.roles[len(state.players)]
         player = Player(
             id=player_id,
@@ -268,7 +274,7 @@ class GameManager:
             vote_counts[vote.target_role_name] = vote_counts.get(vote.target_role_name, 0) + 1
         total_players = len(state.players)  # All players count (including admin)
         for count in vote_counts.values():
-            if count >= total_players * 0.5:
+            if count >= total_players * CONSENSUS_THRESHOLD:
                 return True
         return False
 
@@ -451,14 +457,8 @@ class GameManager:
         clues = {}
         private_events = []
 
-        # Layer map: act1 → layer 2, act2 → layer 3
-        layer_map = {
-            "act1": "2",
-            "act2": "3",
-        }
-        # Build the act key from the act number
         act_key = f"act{new_act}"
-        layer_to_unlock = layer_map.get(act_key)
+        layer_to_unlock = ACT_UNLOCK_MAP.get(act_key)
 
         if layer_to_unlock:
             for pid, player in state.players.items():

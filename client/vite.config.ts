@@ -19,5 +19,22 @@ export default defineConfig({
         secure: false
       }
     }
-  }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('vue/dist') || id.includes('vue-router') || id.includes('pinia')) {
+              return 'vendor';
+            }
+          }
+          if (id.includes('/components/game/') || id.includes('/components/GamePage.vue')) {
+            return 'game';
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 500,
+  },
 })

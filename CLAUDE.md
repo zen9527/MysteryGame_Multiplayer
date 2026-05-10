@@ -15,22 +15,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Directory Structure
 
 ```
-server/          FastAPI backend (main.py, config, models, game_manager, websocket_hub, api_routes, host_dm, llm_client, middleware)
-client/src/      Vue 3 frontend (App.vue, router.ts, stores/game.ts, types/ws.ts, utils/ws.ts [deprecated], 12 components)
-shared/          ws_types.py — Pydantic schemas for WebSocket messages; schemas.ts — Zod schemas for frontend validation
-tests/           pytest suite (test_game_manager.py, test_dm_chat_response.py, test_integration.py, conftest.py)
-docs/            Design specs and implementation plans (docs/superpowers/)
+server/
+  main.py           FastAPI app entrypoint, registers DI and middleware
+  config.py         Environment config (LLM_ENDPOINT, LLM_MODEL, etc.)
+  models.py         Pydantic models (Script, Role, Clue, GameState, etc.)
+  game_manager.py   GameManager — in-memory game state management
+  websocket_hub.py  WebSocketHub — WS connection routing and broadcast
+  host_dm.py        HostDM — LLM-powered DM host
+  llm_client.py     LLMClient — sync OpenAI-compatible chat API client
+  middleware.py     CORS middleware and require_admin guard
+  api/              Modular API routes (rooms, game, script, dm, chat, voting, config)
+  di/               Dependency injection container
+  utils/            Shared utilities (display_name, endpoint normalization)
+client/src/
+  App.vue, router.ts, main.ts
+  stores/game.ts    Pinia store for all game state
+  types/ws.ts       TypeScript WebSocket message types
+  utils/ws.ts       WebSocketManager (used by useWebSocket composable)
+  utils/sse.ts      SSE stream consumer
+  composables/      useWebSocket, useSSE, useGameActions
+  components/       Top-level page components (GamePage, RoomList, RoomJoin, WaitingLobby, etc.)
+  components/game/  In-game components (AccusationPanel, EventDisplay, PlayerList, PublicChatPanel, VotePanel)
+  components/admin/ Admin components (AdminConsole, DmLogViewer, ScriptPreview)
+shared/
+  ws_types.py       Pydantic schemas for WebSocket messages
+  schemas.ts        Zod schemas for frontend validation
+tests/
+  conftest.py, test_game_manager.py, test_dm_chat_response.py, test_integration.py
+docs/
+  superpowers/      Design specs and implementation plans
+  architecture.md   Architecture overview
+  api-reference.md  API endpoint reference
 ```
 
 ## Key Architecture
 
-- **GameManager** (server/game_manager.py): Singleton `manager` holds all game states in memory. Handles room lifecycle, player management, voting/consensus, phase transitions, distribution caching for WS reconnect.
-- **WebSocketHub** (server/websocket_hub.py): Singleton `hub` manages WebSocket connections per room. Routes client messages (chat, private_chat, accuse, request_advance) to GameManager. `request_advance` uses `asyncio.to_thread()` for non-blocking LLM calls.
-- **HostDM** (server/host_dm.py): Singleton `host` wraps LLMClient with a DM system prompt. Provides `generate_event()`, `respond_to_chat_stream()`, `respond_to_chat()` (blocking), and streaming script generation.
-- **LLMClient** (server/llm_client.py): Synchronous OpenAI-compatible chat API client using `requests`. All methods are sync — must be wrapped in `asyncio.to_thread()` when called from async handlers (SSE generators are auto-wrapped by Starlette's threadpool).
-- **API Routes** (server/api_routes.py): REST endpoints for room CRUD, script generation (admin-only, SSE streaming), game control, DM chat (SSE streaming), voting, chat, LLM config. Admin actions guarded by `require_admin()`. Uses `run_in_threadpool` for sync LLM calls in async handlers.
+- **DI Container** (`server/di/container.py`): Registers all core services (LLMClient, GameManager, WebSocketHub, HostDM) as singletons. API modules resolve dependencies via `container.resolve("service_name")`. Enables testability by allowing service overrides.
+- **GameManager** (`server/game_manager.py`): Holds all game states in memory. Handles room lifecycle, player management, voting/consensus, phase transitions, distribution caching for WS reconnect.
+- **WebSocketHub** (`server/websocket_hub.py`): Manages WebSocket connections per room. Routes client messages (chat, private_chat, accuse, request_advance) to GameManager. `request_advance` uses `asyncio.to_thread()` for non-blocking LLM calls.
+- **HostDM** (`server/host_dm.py`): Wraps LLMClient with a DM system prompt. Provides `generate_event()`, `respond_to_chat_stream()`, `respond_to_chat()` (blocking), and streaming script generation.
+- **LLMClient** (`server/llm_client.py`): Synchronous OpenAI-compatible chat API client using `requests`. All methods are sync — must be wrapped in `asyncio.to_thread()` when called from async handlers (SSE generators are auto-wrapped by Starlette's threadpool).
+- **API Routes** (`server/api/`): Modular REST endpoints split into domain routers (rooms, game, script, dm, chat, voting, config). All included via `server/api/__init__.py`. Admin actions guarded by `require_admin()`. Uses `run_in_threadpool` for sync LLM calls in async handlers.
+- **Shared Utilities** (`server/utils/`): `display_name.py` provides `resolve_display_name()` and `resolve_display_name_for_message()` for consistent player name resolution. `endpoint.py` provides `normalize_endpoint()` for LLM URL normalization.
 - **Frontend Router**: `/` → RoomList, `/join/:gameId` → RoomJoin, `/lobby/:gameId` → WaitingLobby, `/game/:gameId` → GamePage.
-- **Frontend State**: Pinia store `useGameStore` manages phase, act, messages, players, currentEvent, roleCard (3 layers), privateMessages, clues (Array), publicMessages (deduplicated via seenMessageKeys), activeTab, actBanner (auto-dismiss). WebSocketManager (`utils/ws.ts`) is deprecated — `GamePage.vue` uses direct WebSocket connections with storeToRefs bidirectional sync.
+- **Frontend State**: Pinia store `useGameStore` manages phase, act, messages, players, currentEvent, roleCard (3 layers), privateMessages, clues (Array), publicMessages (deduplicated via seenMessageKeys), activeTab, actBanner (auto-dismiss).
+- **Frontend Composables**: `useWebSocket` manages WS connection via WebSocketManager, `useSSE` manages SSE streaming with loading/error state, `useGameActions` wraps store actions for admin and player operations with storeToRefs.
 
 ## Development Commands
 
@@ -69,17 +98,18 @@ pytest tests/ -v   # Backend tests (project root is in sys.path via conftest.py)
 ## Important Notes
 
 - All game state is in-memory (no database). Restarting server clears all games.
-- `server/game_manager.py` and `server/websocket_hub.py` use module-level singletons (`manager`, `hub`).
-- **Distribution Cache**: GameState stores `distributed_role_cards`, `distributed_clues`, `distributed_dm_private`, `distributed_accusations` — used to resend on WS (re)connect via `get_pending_distributions()`. ALL WS messages containing private data MUST be cached here.
+- **DI Container**: Services registered in `server/di/container.py` via `register_services()`. API modules use `container.resolve()` to get service instances. Singletons are cached for the process lifetime.
+- `server/websocket_hub.py` still uses module-level `hub` singleton directly (legacy). API modules use DI container.
+- **Distribution Cache**: GameState stores `distributed_role_cards`, `distributed_clues`, `distributed_dm_private`, `distributed_accusations`, `distributed_private_chat` — used to resend on WS (re)connect via `get_pending_distributions()`. ALL WS messages containing private data MUST be cached here.
 - **push_structured_event**: Private clues are cached in `distributed_dm_private` for WS reconnect resilience.
 - **/dm/private endpoint**: Admin DM messages are stored in `private_messages` AND cached in `distributed_dm_private` for reconnect.
 - **unlock_phase**: Uses `act_key = f"act{new_act}"` to look up layer_map. Layer map: act1→layer2, act2→layer3. Phase stays "playing" — acts 1/2 are within playing phase.
-- **Clue defaults**: `_normalize_script_json` defaults `unlock_phase` to `"act1"` (not `"act2"`). Script generation prompt instructs LLM to spread clues across act1 (2-3) and act2 (3-5).
+- **Clue defaults**: `_normalize_script_json` (in `server/api/script.py`) defaults `unlock_phase` to `"act1"` (not `"act2"`). Script generation prompt instructs LLM to spread clues across act1 (2-3) and act2 (3-5).
 - **WS on_connect**: Resends phase_unlock, all cached distributions (role cards, clues, dm_private, accusations — deduplicated to avoid double-send), and last 50 public messages with resolved player names.
-- **Chat display**: Chat messages show `角色名(玩家名)` format (e.g., "林默(张三)"). DM messages show "🎭 DM". Resolved by `_resolve_display_name()` helper in websocket_hub (imported by api_routes).
+- **Chat display**: Chat messages show `角色名(玩家名)` format (e.g., "林默(张三)"). DM messages show "🎭 DM". Resolved by `resolve_display_name()` in `server/utils/display_name.py` and `_resolve_display_name()` in `server/websocket_hub.py`.
 - **Chat**: `sendPublicChat` uses WS only — server handles persistence via `manager.add_chat_message`. WS broadcast includes `from_player_id` for deduplication.
 - **Private chat**: `private_chat` WS messages are cached in `distributed_private_chat` for WS reconnect resilience. Both sender and receiver get cached copy via `manager.cache_private_chat()`.
-- **DM auto-opening**: `start_game` triggers `asyncio.create_task(_auto_generate_opening)` background task. DM opening narrative arrives via WS broadcast after LLM generation (10-30s). No frontend changes needed.
+- **DM auto-opening**: `start_game` triggers `asyncio.create_task(_auto_generate_opening)` background task (in `server/api/game.py`). DM opening narrative arrives via WS broadcast after LLM generation (10-30s). No frontend changes needed.
 - **DM Chat**: `POST /api/rooms/{gameId}/dm/chat-response` SSE streaming. Player's own message is immediately pushed to `store.privateMessages`. DM reply streamed via SSE, cached via `manager.add_dm_chat_response()`.
 - **request_advance**: WS message, non-blocking via `asyncio.to_thread()`. Frontend shows `requestingClue` loading state, cleared when `event` WS message arrives or 15s timeout.
 - **advance-act**: `POST /api/rooms/{gameId}/advance-act` admin endpoint. Calls `unlock_phase` with act+1, broadcasts `phase_unlock` and distributes new role cards, clues, and private events via WS.
@@ -94,4 +124,6 @@ pytest tests/ -v   # Backend tests (project root is in sys.path via conftest.py)
 
 ## Known Technical Debt
 
-- None currently tracked.
+- `server/websocket_hub.py` still imports `manager` and `host` as module-level singletons instead of using DI container.
+- `server/middleware.py` still imports `manager` directly for `require_admin()` instead of using DI container.
+- `ChatPanel.vue` exists but is unused (replaced by `PublicChatPanel.vue`).

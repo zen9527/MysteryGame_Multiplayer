@@ -33,7 +33,7 @@ def register_services(container):
     container.register("llm_client", LLMClient)
     container.register("game_manager", GameManager, singleton=True)
     container.register("websocket_hub", WebSocketHub, singleton=True)
-    container.register("host_dm", lambda: HostDM(container.resolve("llm_client")), singleton=True)
+    container.register("host_dm", HostDM, singleton=True)
 
 
 container = Container()

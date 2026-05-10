@@ -2,9 +2,17 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 import uuid
 from server.models import Script, Role, Clue, PlotOutline, Vote, Accusation, Message
+from server.constants import MAX_PUBLIC_MESSAGE_HISTORY
 from server.di import container
 from server.middleware import require_admin
 from server.utils.display_name import resolve_display_name_for_message
+from server.utils.validation import (
+    CreateRoomRequest,
+    JoinRoomRequest,
+    AdminActionRequest,
+    PlayerLeaveRequest,
+    sanitize_string,
+)
 
 router = APIRouter()
 
@@ -15,6 +23,7 @@ def _get_manager():
 
 def _get_hub():
     return container.resolve("websocket_hub")
+
 
 GENRES = [
     {"value": "悬疑推理", "label": "经典谋杀案，逻辑推理"},
@@ -28,22 +37,11 @@ GENRES = [
 DIFFICULTIES = ["简单", "中等", "困难"]
 
 
-# --- Request models ---
-
-class PlayerJoinRequest(BaseModel):
-    player_id: str
-    name: str
-
-
-class CreateRoomRequest(BaseModel):
-    creator_id: str  # 管理员 ID
-    name: str = "管理员"  # 管理员名字（也作为玩家参与游戏）
-
-
-# --- Room CRUD endpoints ---
-
 @router.post("/rooms")
 async def create_room(req: CreateRoomRequest):
+    req.name = sanitize_string(req.name)
+    if not req.name:
+        raise HTTPException(status_code=400, detail="管理员名字不能为空")
     game_id = str(uuid.uuid4())
     _get_manager().create_game(game_id, req.creator_id)
     _get_manager().add_player(game_id, req.creator_id, req.name)
@@ -104,7 +102,7 @@ async def get_room(game_id: str):
                 "type": m.type,
                 "timestamp": str(m.timestamp),
             }
-            for m in state.public_messages[-50:]
+            for m in state.public_messages[-MAX_PUBLIC_MESSAGE_HISTORY:]
         ],
     }
 
@@ -116,10 +114,11 @@ async def delete_room(game_id: str):
     return {"status": "deleted"}
 
 
-# --- Player management endpoints ---
-
 @router.post("/rooms/{game_id}/players")
-async def add_player(game_id: str, req: PlayerJoinRequest):
+async def add_player(game_id: str, req: JoinRoomRequest):
+    req.name = sanitize_string(req.name)
+    if not req.name:
+        raise HTTPException(status_code=400, detail="玩家名字不能为空")
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
@@ -145,13 +144,8 @@ async def list_players(game_id: str):
     }
 
 
-class AdminActionRequest(BaseModel):
-    player_id: str  # 管理员 ID，用于权限校验
-
-
 @router.post("/rooms/{game_id}/players/{target_pid}/kick")
 async def kick_player(game_id: str, target_pid: str, req: AdminActionRequest):
-    """踢出玩家（仅管理员）"""
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
@@ -170,28 +164,26 @@ async def kick_player(game_id: str, target_pid: str, req: AdminActionRequest):
 
 
 @router.post("/rooms/{game_id}/leave")
-async def leave_room(game_id: str, req: PlayerJoinRequest):
-    """玩家离开房间"""
+async def leave_room(game_id: str, req: PlayerLeaveRequest):
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
-    
+
     if req.player_id not in state.players:
         raise HTTPException(status_code=400, detail="玩家不在房间中")
-    
+
     target_player = state.players.get(req.player_id)
     _get_manager().kick_player(game_id, req.player_id)
-    
+
     await _get_hub().broadcast(game_id, {
         "type": "player_left",
         "player_id": req.player_id,
         "player_name": target_player.name if target_player else "",
     })
-    
+
     return {"status": "left", "player_id": req.player_id}
 
 
 @router.get("/genres")
 async def list_genres():
-    """返回可用的剧本类型列表"""
     return {"genres": GENRES, "difficulties": DIFFICULTIES}

@@ -1,4 +1,5 @@
 import type { WSMessage, ClientMessage } from '../types/ws';
+import { WS_MAX_RECONNECT_ATTEMPTS, WS_BASE_RECONNECT_DELAY } from '../constants';
 
 /**
  * WebSocket close codes
@@ -17,8 +18,8 @@ export class WebSocketManager {
   private onMessage: ((msg: WSMessage) => void) | null = null;
   private onClose: (() => void) | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private baseReconnectDelay = 1000; // 1s
+  private maxReconnectAttempts = WS_MAX_RECONNECT_ATTEMPTS;
+  private baseReconnectDelay = WS_BASE_RECONNECT_DELAY;
 
   constructor(roomId: string, playerId: string) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

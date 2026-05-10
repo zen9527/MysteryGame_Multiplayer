@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 import json
 import asyncio
 from server.models import Script, Role, Clue, PlotOutline
 from server.di import container
 from server.middleware import require_admin
+from server.utils.validation import AdminActionRequest
 
 router = APIRouter()
 
@@ -20,10 +20,6 @@ def _get_host_dm():
 
 def _get_hub():
     return container.resolve("websocket_hub")
-
-
-class AdminActionRequest(BaseModel):
-    player_id: str  # 管理员 ID，用于权限校验
 
 
 @router.post("/rooms/{game_id}/start")
@@ -98,7 +94,6 @@ async def start_game(game_id: str):
 
 
 async def _auto_generate_opening(game_id: str):
-    """Background task: generate DM opening narrative after game starts."""
     state = _get_manager().get_state(game_id)
     if not state or state.phase != "playing":
         return
@@ -118,7 +113,6 @@ async def _auto_generate_opening(game_id: str):
 
 
 def _push_event_generator(game_id: str, state):
-    """SSE generator for DM event generation."""
     if state.phase != "playing":
         yield f"data: {{\"type\": \"error\", \"message\": \"只能在游戏进行中推进剧情\"}}\n\n"
         return
@@ -143,7 +137,6 @@ def _push_event_generator(game_id: str, state):
 
 @router.post("/rooms/{game_id}/dm/push-event")
 async def push_event(game_id: str, req: AdminActionRequest):
-    """流式推进剧情（SSE），实时返回生成进度。"""
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
@@ -162,7 +155,6 @@ async def push_event(game_id: str, req: AdminActionRequest):
 
 @router.post("/rooms/{game_id}/advance-act")
 async def advance_act(game_id: str, req: AdminActionRequest):
-    """推进到下一幕（仅管理员）。触发新幕的角色卡、线索、私信分发。"""
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
@@ -218,7 +210,6 @@ async def advance_act(game_id: str, req: AdminActionRequest):
 
 @router.post("/rooms/{game_id}/force-trial")
 async def force_trial(game_id: str, req: AdminActionRequest):
-    """强制进入审判（仅管理员）"""
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
@@ -229,7 +220,6 @@ async def force_trial(game_id: str, req: AdminActionRequest):
 
 
 def _end_game_generator(game_id: str, state):
-    """SSE generator for game end with truth reveal streaming."""
     try:
         yield f"data: {{\"type\": \"start\"}}\n\n"
 
@@ -254,7 +244,6 @@ def _end_game_generator(game_id: str, state):
 
 @router.post("/rooms/{game_id}/end-game")
 async def end_game(game_id: str, req: AdminActionRequest):
-    """流式结束游戏（SSE），实时揭晓真相。"""
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")

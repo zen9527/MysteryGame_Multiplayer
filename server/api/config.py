@@ -4,6 +4,7 @@ from typing import Optional
 from starlette.concurrency import run_in_threadpool
 from server.di import container
 from server.utils.endpoint import normalize_endpoint
+from server.utils.validation import mask_api_key
 
 router = APIRouter()
 
@@ -24,24 +25,33 @@ class LLMConfigRequest(BaseModel):
 
 @router.get("/llm-config")
 async def get_llm_config():
-    """获取当前 LLM 配置（api_key 脱敏）"""
-    return _get_host_dm().llm.get_config()
+    config = _get_host_dm().llm.get_config()
+    config["api_key_masked"] = mask_api_key(_get_host_dm().llm.api_key)
+    if "api_key" in config:
+        del config["api_key"]
+    return config
 
 
 @router.post("/llm-config")
 async def update_llm_config(req: LLMConfigRequest):
-    """更新 LLM 配置（运行时生效，不持久化到 .env）"""
+    if req.endpoint is not None:
+        normalized = normalize_endpoint(req.endpoint)
+        if not normalized:
+            raise HTTPException(status_code=400, detail="无效的 LLM 端点 URL")
     _get_host_dm().llm.set_runtime_config(
         endpoint=req.endpoint,
         model=req.model,
         api_key=req.api_key,
     )
-    return {"status": "updated", **_get_host_dm().llm.get_config()}
+    config = _get_host_dm().llm.get_config()
+    config["api_key_masked"] = mask_api_key(_get_host_dm().llm.api_key)
+    if "api_key" in config:
+        del config["api_key"]
+    return {"status": "updated", **config}
 
 
 @router.post("/test-llm")
 async def test_llm(req: Optional[LLMConfigRequest] = None):
-    """测试 LLM 连接。可传入可选配置进行临时测试（不保存）。"""
     orig_endpoint = _get_host_dm().llm.endpoint
     orig_model = _get_host_dm().llm.model
     orig_api_key = _get_host_dm().llm.api_key
@@ -80,7 +90,6 @@ async def test_llm(req: Optional[LLMConfigRequest] = None):
 
 @router.get("/llm-models")
 async def list_llm_models():
-    """获取 LLM 提供商可用的模型列表"""
     try:
         models = await run_in_threadpool(_get_host_dm().llm.list_models)
         return {"models": models}
@@ -90,5 +99,4 @@ async def list_llm_models():
 
 @router.get("/health")
 async def health_check():
-    # manager replaced with DI
     return {"status": "ok", "games_count": len(_get_manager().games)}

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 from server.di import container
+from server.utils.validation import ChatRequest, sanitize_string
 
 router = APIRouter()
 
@@ -9,15 +9,11 @@ def _get_manager():
     return container.resolve("game_manager")
 
 
-class ChatMessageRequest(BaseModel):
-    player_id: str
-    message: str
-    is_private: bool = False
-    target_player_id: str | None = None
-
-
 @router.post("/rooms/{game_id}/chat")
-async def send_message(game_id: str, req: ChatMessageRequest):
+async def send_message(game_id: str, req: ChatRequest):
+    req.message = sanitize_string(req.message)
+    if not req.message:
+        raise HTTPException(status_code=400, detail="消息内容不能为空")
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")

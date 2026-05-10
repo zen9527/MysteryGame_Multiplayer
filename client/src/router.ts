@@ -1,8 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import RoomList from './components/RoomList.vue';
-import RoomJoin from './components/RoomJoin.vue';
-import WaitingLobby from './components/WaitingLobby.vue';
-import GamePage from './components/GamePage.vue';
+
+const RoomList = () => import('./components/RoomList.vue');
+const RoomJoin = () => import('./components/RoomJoin.vue');
+const WaitingLobby = () => import('./components/WaitingLobby.vue');
+const GamePage = () => import('./components/GamePage.vue');
 
 const routes = [
   { path: '/', component: RoomList },

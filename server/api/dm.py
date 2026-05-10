@@ -2,8 +2,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from datetime import datetime
+from server.constants import DM_CHAT_RATE_LIMIT_SECONDS
 from server.di import container
 from server.middleware import require_admin
+import json
 
 router = APIRouter()
 
@@ -84,8 +86,8 @@ def _chat_response_generator(game_id: str, player_id: str, player_message: str, 
         return
 
     last_chat = state.dm_chat_cooldowns.get(player_id)
-    if last_chat and (datetime.now() - last_chat).total_seconds() < 30:
-        yield f"data: {{\"type\": \"error\", \"message\": \"请等待 30 秒后再向 DM 提问\"}}\n\n"
+    if last_chat and (datetime.now() - last_chat).total_seconds() < DM_CHAT_RATE_LIMIT_SECONDS:
+        yield f"data: {{\"type\": \"error\", \"message\": \"请等待 {DM_CHAT_RATE_LIMIT_SECONDS} 秒后再向 DM 提问\"}}\n\n"
         return
 
     state.dm_chat_cooldowns[player_id] = datetime.now()
