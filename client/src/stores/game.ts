@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { WSMessage } from '../types/ws';
+import type { ScriptMetadata, ScriptFilters } from '../types/script';
+import { scriptApi } from '../types/script';
 import { ACT_BANNER_DISMISS_MS } from '../constants';
 
 export interface RoleCardData {
@@ -59,6 +61,10 @@ export const useGameStore = defineStore('game', () => {
 
   // Act transition banner (auto-dismiss)
   const actBanner = ref<{ act: number; plot_summary: string } | null>(null);
+
+  // Script selection state
+  const selectedScriptId = ref<string | null>(null);
+  const availableScripts = ref<ScriptMetadata[]>([]);
 
   function _addPublicMessage(from: string, content: string, timestamp: string, isEvent = false) {
     // Key without timestamp — WS messages have timestamp="" while API messages have real timestamps
@@ -230,6 +236,34 @@ export const useGameStore = defineStore('game', () => {
     console.log('Request advance');
   }
 
+  // Script selection actions
+  async function fetchScripts(filters?: ScriptFilters) {
+    try {
+      availableScripts.value = await scriptApi.listScripts(filters);
+    } catch (error) {
+      console.error('Failed to fetch scripts:', error);
+      availableScripts.value = [];
+    }
+  }
+
+  function selectScript(scriptId: string) {
+    selectedScriptId.value = scriptId;
+  }
+
+  async function createRoomWithScript(playerName: string, creatorId: string): Promise<string> {
+    const response = await fetch('/api/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: playerName,
+        creator_id: creatorId,
+        script_id: selectedScriptId.value
+      })
+    });
+    const data = await response.json();
+    return data.game_id;
+  }
+
   return {
     phase,
     act,
@@ -252,5 +286,10 @@ export const useGameStore = defineStore('game', () => {
     submitAccusation,
     castVote,
     requestAdvance,
+    selectedScriptId,
+    availableScripts,
+    fetchScripts,
+    selectScript,
+    createRoomWithScript,
   };
 });
