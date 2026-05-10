@@ -1,37 +1,16 @@
-# Script Murder - Unified Stop Script
-$ErrorActionPreference = "Continue"
+# Script Murder - Stop Servers
+Write-Host "=== Stopping Script Murder ===" -ForegroundColor Cyan
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Script Murder - Stopping Servers" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-# Stop backend (port 8000)
-Write-Host "Checking backend process (port 8000)..." -ForegroundColor Yellow
-$backendProcesses = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
-if ($backendProcesses) {
-    foreach ($processId in $backendProcesses) {
-        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-        Write-Host "  Stopped backend PID=$processId" -ForegroundColor Green
+# Stop by port
+$ports = @(8000, 3000)
+foreach ($port in $ports) {
+    $procs = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+    if ($procs) {
+        foreach ($id in $procs) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
+        Write-Host "Stopped port $port" -ForegroundColor Green
+    } else {
+        Write-Host "Port $port not in use" -ForegroundColor Gray
     }
-} else {
-    Write-Host "  Backend not running" -ForegroundColor Gray
 }
 
-# Stop frontend (port 3000)
-Write-Host "Checking frontend process (port 3000)..." -ForegroundColor Yellow
-$frontendProcesses = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
-if ($frontendProcesses) {
-    foreach ($processId in $frontendProcesses) {
-        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-        Write-Host "  Stopped frontend PID=$processId" -ForegroundColor Green
-    }
-} else {
-    Write-Host "  Frontend not running" -ForegroundColor Gray
-}
-
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
-Write-Host "  Servers stopped" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Green
-Write-Host ""
+Write-Host "`nServers stopped." -ForegroundColor Yellow
