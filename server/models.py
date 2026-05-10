@@ -58,6 +58,31 @@ class Script(BaseModel):
     private_events: List[PrivateEvent] = Field(default_factory=list)
 
 
+class ScriptMetadata(BaseModel):
+    """Script metadata for listing (no sensitive data)"""
+    id: str
+    title: str
+    genre: Optional[str] = None
+    difficulty: Optional[str] = None
+    player_count: Optional[int] = None
+    estimated_time: Optional[int] = None
+    background_story: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class ScriptDetail(BaseModel):
+    """Script detail with masked sensitive fields"""
+    id: str
+    title: str
+    genre: Optional[str] = None
+    difficulty: Optional[str] = None
+    player_count: Optional[int] = None
+    estimated_time: Optional[int] = None
+    background_story: Optional[str] = None
+    roles: List[Role] = []
+    plot_outline: Optional[PlotOutline] = None
+
+
 class Player(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
