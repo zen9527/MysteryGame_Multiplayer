@@ -43,7 +43,7 @@ async def create_room(req: CreateRoomRequest):
     if not req.name:
         raise HTTPException(status_code=400, detail="管理员名字不能为空")
     game_id = str(uuid.uuid4())
-    _get_manager().create_game(game_id, req.creator_id)
+    _get_manager().create_game(game_id, req.creator_id, script_id=req.script_id)
     _get_manager().add_player(game_id, req.creator_id, req.name)
     return {"game_id": game_id}
 

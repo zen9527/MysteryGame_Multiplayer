@@ -423,3 +423,41 @@ def test_cache_private_chat(game_manager, sample_script):
     assert len(private_p2) == 1
     assert private_p2[0]["from"] == "p1"
     assert private_p2[0]["content"] == "这是一条私信"
+
+
+def test_create_game_with_script_id():
+    from server.di import container, register_services
+    
+    # Re-register services after clear
+    container.clear()
+    register_services(container)
+    
+    # Setup: Create a script in repository
+    repo = container.resolve("script_repository")
+    script_data = {
+        "title": "Test Script",
+        "genre": "悬疑",
+        "difficulty": "中等",
+        "estimated_time": 120,
+        "background_story": "Test background",
+        "true_killer": "角色 A",
+        "murder_method": "测试",
+        "cover_up": "测试",
+        "roles": [{"id": "1", "name": "角色 A", "age": 30, "occupation": "测试", 
+                   "description": "描述", "background": "背景", "secret_task": "任务", "alibi": "不在场证明",
+                   "motive": "动机", "relationships": []}],
+        "clues": [],
+        "plot_outline": {"act1": "第一幕", "act2": "第二幕", "act3": "第三幕"},
+        "private_events": []
+    }
+    script_id = repo.create(script_data)
+    
+    # Test: Create game with script_id using DI container's manager
+    manager = container.resolve("game_manager")
+    game_id = "test-123"
+    manager.create_game(game_id, "admin-1", script_id=script_id)
+    
+    state = manager.games[game_id]
+    assert state.script_id == script_id
+    assert state.script.title == "Test Script"
+    assert state.script.roles[0].name == "角色 A"

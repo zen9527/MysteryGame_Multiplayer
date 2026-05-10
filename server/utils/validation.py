@@ -21,6 +21,7 @@ def mask_api_key(key: str) -> str:
 class CreateRoomRequest(BaseModel):
     creator_id: str = Field(..., min_length=1, max_length=50)
     name: str = Field(default="管理员", min_length=1, max_length=MAX_PLAYER_NAME_LENGTH)
+    script_id: Optional[str] = None
 
 
 class JoinRoomRequest(BaseModel):

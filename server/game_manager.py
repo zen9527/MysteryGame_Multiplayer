@@ -7,14 +7,15 @@ from server.constants import (
 )
 from datetime import datetime, timedelta
 from typing import Optional
+from server.di import container
 
 
 class GameManager:
     def __init__(self):
         self.games: dict[str, GameState] = {}
 
-    def create_game(self, game_id: str, creator_id: str) -> GameState:
-        """创建房间，使用空剧本（等待LLM生成）"""
+    def create_game(self, game_id: str, creator_id: str, script_id: Optional[str] = None) -> GameState:
+        """创建房间，可选使用已存储的剧本"""
         placeholder_script = Script(
             title="待生成",
             genre="悬疑推理",
@@ -24,10 +25,29 @@ class GameManager:
             true_killer="",
             murder_method="",
             cover_up="",
-            roles=[],  # LLM生成后填充
+            roles=[],  # LLM 生成后填充
             clues=[],
             plot_outline=PlotOutline(act1="", act2="", act3=""),
         )
+        
+        # If script_id provided, load from repository
+        if script_id:
+            try:
+                service = container.resolve("script_service")
+                script_data = service.get_detail(script_id)
+                if script_data:
+                    # Get full content from repository for game initialization
+                    repo = container.resolve("script_repository")
+                    script_full = repo.get(script_id)
+                    if script_full and script_full.get("full_content"):
+                        placeholder_script = Script(**script_full["full_content"])
+                    else:
+                        pass  # Fall back to placeholder
+                else:
+                    pass  # Fall back to placeholder
+            except Exception:
+                pass  # Fall back to placeholder
+        
         state = GameState(
             game_id=game_id,
             phase="waiting",
@@ -35,6 +55,7 @@ class GameManager:
             room_creator_id=creator_id,
             players={},
             script=placeholder_script,
+            script_id=script_id,
             timer_start=datetime.now(),
         )
         self.games[game_id] = state
