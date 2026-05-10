@@ -156,6 +156,13 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { useGameStore } from '../stores/game';
 import { storeToRefs } from 'pinia';
+import {
+  REQUEST_CLUE_TIMEOUT,
+  RECONNECT_DELAY,
+  FETCH_STATE_INTERVAL,
+  WS_SEND_RETRIES,
+  WS_SEND_RETRY_DELAY,
+} from '../constants';
 import GameTimer from './GameTimer.vue';
 import AdminPanel from './AdminPanel.vue';
 import RoleCard from './RoleCard.vue';
@@ -313,16 +320,15 @@ function connectWebSocket() {
 
   ws.onclose = () => {
     console.log('WS disconnected, reconnecting...');
-    setTimeout(connectWebSocket, 3000);
+    setTimeout(connectWebSocket, RECONNECT_DELAY);
   };
 }
 
 function sendWSMessage(type: string, data: Record<string, any> = {}, retries = 0) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type, ...data }));
-  } else if (ws && retries < 5) {
-    // WS not ready yet — retry up to 5 times (2.5s max)
-    setTimeout(() => sendWSMessage(type, data, retries + 1), 500);
+  } else if (ws && retries < WS_SEND_RETRIES) {
+    setTimeout(() => sendWSMessage(type, data, retries + 1), WS_SEND_RETRY_DELAY);
   }
 }
 
@@ -341,7 +347,7 @@ async function requestClue() {
   sendWSMessage('request_advance');
   // The server will generate an event and broadcast it via WS.
   // Auto-reset loading after 15 seconds (LLM may take a while but will broadcast when done).
-  setTimeout(() => { requestingClue.value = false; }, 15000);
+    setTimeout(() => { requestingClue.value = false; }, REQUEST_CLUE_TIMEOUT);
 }
 
   async function submitAccusation() {
@@ -586,7 +592,7 @@ async function handlePushEvent() {
 onMounted(() => {
   fetchState();
   connectWebSocket();
-  const interval = setInterval(fetchState, 5000);
+  const interval = setInterval(fetchState, FETCH_STATE_INTERVAL);
   return () => clearInterval(interval);
 });
 
