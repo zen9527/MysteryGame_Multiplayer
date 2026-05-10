@@ -10,9 +10,9 @@ Write-Host ""
 Write-Host "Checking backend process (port 8000)..." -ForegroundColor Yellow
 $backendProcesses = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
 if ($backendProcesses) {
-    foreach ($pid in $backendProcesses) {
-        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-        Write-Host "  Stopped backend PID=$pid" -ForegroundColor Green
+    foreach ($processId in $backendProcesses) {
+        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+        Write-Host "  Stopped backend PID=$processId" -ForegroundColor Green
     }
 } else {
     Write-Host "  Backend not running" -ForegroundColor Gray
@@ -22,9 +22,9 @@ if ($backendProcesses) {
 Write-Host "Checking frontend process (port 3000)..." -ForegroundColor Yellow
 $frontendProcesses = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
 if ($frontendProcesses) {
-    foreach ($pid in $frontendProcesses) {
-        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-        Write-Host "  Stopped frontend PID=$pid" -ForegroundColor Green
+    foreach ($processId in $frontendProcesses) {
+        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+        Write-Host "  Stopped frontend PID=$processId" -ForegroundColor Green
     }
 } else {
     Write-Host "  Frontend not running" -ForegroundColor Gray
