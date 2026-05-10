@@ -29,11 +29,15 @@ def register_services(container):
     from server.websocket_hub import WebSocketHub
     from server.host_dm import HostDM
     from server.llm_client import LLMClient
+    from server.script_repository import ScriptRepository
+    from server.script_service import ScriptService
 
     container.register("llm_client", LLMClient)
     container.register("game_manager", GameManager, singleton=True)
     container.register("websocket_hub", WebSocketHub, singleton=True)
     container.register("host_dm", HostDM, singleton=True)
+    container.register("script_repository", ScriptRepository, singleton=True)
+    container.register("script_service", lambda: ScriptService(container.resolve("script_repository")), singleton=True)
 
 
 container = Container()
