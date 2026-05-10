@@ -78,6 +78,12 @@ npm test           # vitest run
 
 # Tests
 pytest tests/ -v   # Backend tests (project root is in sys.path via conftest.py)
+
+# Quick Start (PowerShell scripts)
+.\start.ps1        # Start both servers (two windows)
+.\start-single.ps1 # Start both servers (single window, merged logs)
+.\stop.ps1         # Stop all servers
+.\restart.ps1      # Restart all servers
 ```
 
 ## Configuration
