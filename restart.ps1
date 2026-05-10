@@ -1,18 +1,18 @@
-# Script Murder - 一键重启脚本
-# 先停止再启动
+# Script Murder - Restart Script
+$SCRIPT_DIR = $PSScriptRoot
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Script Murder - 重启服务器" -ForegroundColor Cyan
+Write-Host "  Script Murder - Restarting Servers" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-Write-Host "第一步：停止现有服务器..." -ForegroundColor Yellow
-& "$PSScriptRoot\stop.ps1"
+Write-Host "Step 1: Stopping existing servers..." -ForegroundColor Yellow
+& "$SCRIPT_DIR\stop.ps1"
 
 Write-Host ""
-Write-Host "第二步：等待 2 秒..." -ForegroundColor Yellow
+Write-Host "Step 2: Waiting 2 seconds..." -ForegroundColor Yellow
 Start-Sleep -Seconds 2
 
 Write-Host ""
-Write-Host "第三步：启动新服务器..." -ForegroundColor Yellow
-& "$PSScriptRoot\start.ps1"
+Write-Host "Step 3: Starting new servers..." -ForegroundColor Yellow
+& "$SCRIPT_DIR\start.ps1"
