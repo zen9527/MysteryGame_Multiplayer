@@ -11,7 +11,7 @@ app = FastAPI(title="剧本杀服务器", version="1.0.0")
 
 app.add_middleware(CORSMiddleware)
 app.include_router(ws_router)
-app.include_router(api_router)
+app.include_router(api_router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn

@@ -15,7 +15,7 @@ def _get_manager():
 
 
 def test_health_check():
-    resp = client.get("/health")
+    resp = client.get("/api/health")
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
@@ -23,7 +23,7 @@ def test_health_check():
 
 
 def test_get_llm_config():
-    resp = client.get("/llm-config")
+    resp = client.get("/api/llm-config")
     assert resp.status_code == 200
     data = resp.json()
     assert "endpoint" in data
@@ -32,7 +32,7 @@ def test_get_llm_config():
 
 
 def test_update_llm_config():
-    resp = client.post("/llm-config", json={
+    resp = client.post("/api/llm-config", json={
         "endpoint": "http://localhost:11434/v1",
         "model": "test-model",
     })
@@ -45,14 +45,14 @@ def test_update_llm_config():
 def test_update_llm_config_partial():
     host = _get_host_dm()
     original_endpoint = host.llm.endpoint
-    resp = client.post("/llm-config", json={"model": "partial-model"})
+    resp = client.post("/api/llm-config", json={"model": "partial-model"})
     assert resp.status_code == 200
     assert resp.json()["model"] == "partial-model"
     assert resp.json()["endpoint"] == original_endpoint
 
 
 def test_update_llm_config_api_key_masked():
-    resp = client.post("/llm-config", json={"api_key": "secret-key-12345678"})
+    resp = client.post("/api/llm-config", json={"api_key": "secret-key-12345678"})
     assert resp.status_code == 200
     data = resp.json()
     assert data.get("api_key_set") is True
@@ -62,15 +62,15 @@ def test_update_llm_config_api_key_masked():
 
 
 def test_llm_models_endpoint():
-    resp = client.get("/llm-models")
+    resp = client.get("/api/llm-models")
     assert resp.status_code == 200
     data = resp.json()
     assert "models" in data
 
 
 def test_health_reflects_games_count():
-    resp = client.post("/rooms", json={"creator_id": "health_test_admin"})
+    resp = client.post("/api/rooms", json={"creator_id": "health_test_admin"})
     assert resp.status_code == 200
-    resp = client.get("/health")
+    resp = client.get("/api/health")
     data = resp.json()
     assert data["games_count"] >= 1

@@ -50,9 +50,11 @@ class ClueRevealMessage(BaseModel):
 
 class ChatMessage(BaseModel):
     type: str = "chat"
-    from_player: str
+    from_player: str = Field(alias="from")
     content: str
     timestamp: str
+
+    model_config = {"populate_by_name": True}
 
 
 class AccusationMessage(BaseModel):

@@ -2,16 +2,7 @@ import requests
 import json
 from typing import Optional
 from server.config import config
-
-
-def _normalize_endpoint(url: str) -> str:
-    """Ensure endpoint has http:// scheme and strip trailing slash."""
-    url = url.strip().rstrip("/")
-    if not url:
-        return url
-    if not url.startswith("http://") and not url.startswith("https://"):
-        url = "http://" + url
-    return url
+from server.utils.endpoint import normalize_endpoint as _normalize_endpoint
 
 
 class LLMClient:

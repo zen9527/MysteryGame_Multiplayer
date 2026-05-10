@@ -6,6 +6,7 @@ from server.models import Script, Role, Clue, PlotOutline
 from server.di import container
 from server.middleware import require_admin
 from server.utils.validation import AdminActionRequest
+from server.constants import ACT_UNLOCK_MAP
 
 router = APIRouter()
 
@@ -186,10 +187,13 @@ async def advance_act(game_id: str, req: AdminActionRequest):
     })
 
     if unlock_result:
+        act_key = f"act{new_act}"
+        layer_to_unlock = ACT_UNLOCK_MAP.get(act_key, "2")
+
         for pid, card_data in unlock_result["role_cards"].items():
             await _get_hub().send_to_player(game_id, pid, {
                 "type": "role_card",
-                "layer": "3" if new_act == 2 else "2",
+                "layer": layer_to_unlock,
                 "player_id": pid,
                 "data": card_data,
             })

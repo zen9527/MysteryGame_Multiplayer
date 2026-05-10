@@ -13,7 +13,7 @@ def _get_manager():
 
 
 def _setup_playable_game(creator="admin_1", player_count=2):
-    resp = client.post("/rooms", json={"creator_id": creator})
+    resp = client.post("/api/rooms", json={"creator_id": creator})
     game_id = resp.json()["game_id"]
     mgr = _get_manager()
     state = mgr.get_state(game_id)
@@ -37,7 +37,7 @@ def _setup_playable_game(creator="admin_1", player_count=2):
 
 def test_start_game_success():
     game_id = _setup_playable_game()
-    resp = client.post(f"/rooms/{game_id}/start")
+    resp = client.post(f"/api/rooms/{game_id}/start")
     assert resp.status_code == 200
     data = resp.json()
     assert data["phase"] == "playing"
@@ -47,12 +47,12 @@ def test_start_game_success():
 
 
 def test_start_game_not_found():
-    resp = client.post("/rooms/nonexistent/start")
+    resp = client.post("/api/rooms/nonexistent/start")
     assert resp.status_code == 404
 
 
 def test_start_game_too_few_players():
-    resp = client.post("/rooms", json={"creator_id": "admin_1"})
+    resp = client.post("/api/rooms", json={"creator_id": "admin_1"})
     game_id = resp.json()["game_id"]
     mgr = _get_manager()
     state = mgr.get_state(game_id)
@@ -61,13 +61,13 @@ def test_start_game_too_few_players():
     ]
     mgr.add_player(game_id, "p1", "张三")
     state.script_generated = True
-    resp = client.post(f"/rooms/{game_id}/start")
+    resp = client.post(f"/api/rooms/{game_id}/start")
     assert resp.status_code == 400
     assert "2 名玩家" in resp.json()["detail"]
 
 
 def test_start_game_no_script():
-    resp = client.post("/rooms", json={"creator_id": "admin_1"})
+    resp = client.post("/api/rooms", json={"creator_id": "admin_1"})
     game_id = resp.json()["game_id"]
     mgr = _get_manager()
     state = mgr.get_state(game_id)
@@ -77,7 +77,7 @@ def test_start_game_no_script():
     ]
     mgr.add_player(game_id, "p1", "张三")
     mgr.add_player(game_id, "p2", "李四")
-    resp = client.post(f"/rooms/{game_id}/start")
+    resp = client.post(f"/api/rooms/{game_id}/start")
     assert resp.status_code == 400
     assert "剧本" in resp.json()["detail"]
 
@@ -87,7 +87,7 @@ def test_advance_act_admin(monkeypatch):
     mgr = _get_manager()
     mgr.start_game(game_id)
     resp = client.post(
-        f"/rooms/{game_id}/advance-act",
+        f"/api/rooms/{game_id}/advance-act",
         json={"player_id": "admin_1"},
     )
     assert resp.status_code == 200
@@ -102,7 +102,7 @@ def test_advance_act_non_admin():
     mgr = _get_manager()
     mgr.start_game(game_id)
     resp = client.post(
-        f"/rooms/{game_id}/advance-act",
+        f"/api/rooms/{game_id}/advance-act",
         json={"player_id": "p1"},
     )
     assert resp.status_code == 403
@@ -111,7 +111,7 @@ def test_advance_act_non_admin():
 def test_advance_act_not_playing():
     game_id = _setup_playable_game()
     resp = client.post(
-        f"/rooms/{game_id}/advance-act",
+        f"/api/rooms/{game_id}/advance-act",
         json={"player_id": "admin_1"},
     )
     assert resp.status_code == 400
@@ -123,7 +123,7 @@ def test_advance_act_beyond_max():
     mgr.start_game(game_id)
     mgr.get_state(game_id).act = 3
     resp = client.post(
-        f"/rooms/{game_id}/advance-act",
+        f"/api/rooms/{game_id}/advance-act",
         json={"player_id": "admin_1"},
     )
     assert resp.status_code == 400
@@ -135,7 +135,7 @@ def test_force_trial_admin():
     mgr = _get_manager()
     mgr.start_game(game_id)
     resp = client.post(
-        f"/rooms/{game_id}/force-trial",
+        f"/api/rooms/{game_id}/force-trial",
         json={"player_id": "admin_1"},
     )
     assert resp.status_code == 200
@@ -147,7 +147,7 @@ def test_force_trial_non_admin():
     mgr = _get_manager()
     mgr.start_game(game_id)
     resp = client.post(
-        f"/rooms/{game_id}/force-trial",
+        f"/api/rooms/{game_id}/force-trial",
         json={"player_id": "p1"},
     )
     assert resp.status_code == 403
@@ -155,7 +155,7 @@ def test_force_trial_non_admin():
 
 def test_force_trial_not_found():
     resp = client.post(
-        "/rooms/nonexistent/force-trial",
+        "/api/rooms/nonexistent/force-trial",
         json={"player_id": "admin"},
     )
     assert resp.status_code == 404
@@ -170,7 +170,7 @@ def test_end_game_admin(monkeypatch):
     mgr = _get_manager()
     mgr.start_game(game_id)
     resp = client.post(
-        f"/rooms/{game_id}/end-game",
+        f"/api/rooms/{game_id}/end-game",
         json={"player_id": "admin_1"},
     )
     assert resp.status_code == 200
@@ -182,7 +182,7 @@ def test_end_game_non_admin():
     mgr = _get_manager()
     mgr.start_game(game_id)
     resp = client.post(
-        f"/rooms/{game_id}/end-game",
+        f"/api/rooms/{game_id}/end-game",
         json={"player_id": "p1"},
     )
     assert resp.status_code == 403
@@ -190,7 +190,7 @@ def test_end_game_non_admin():
 
 def test_advance_act_not_found():
     resp = client.post(
-        "/rooms/nonexistent/advance-act",
+        "/api/rooms/nonexistent/advance-act",
         json={"player_id": "admin"},
     )
     assert resp.status_code == 404
@@ -198,7 +198,7 @@ def test_advance_act_not_found():
 
 def test_end_game_not_found():
     resp = client.post(
-        "/rooms/nonexistent/end-game",
+        "/api/rooms/nonexistent/end-game",
         json={"player_id": "admin"},
     )
     assert resp.status_code == 404

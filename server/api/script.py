@@ -17,11 +17,31 @@ def _get_host_dm():
     return container.resolve("host_dm")
 
 
+def _get_hub():
+    return container.resolve("websocket_hub")
+
+
 class ScriptGenerationRequest(BaseModel):
     genre: str
     difficulty: str = "中等"
     estimated_time: int = 90
     player_count: int = 4
+
+
+class SetScriptRequest(BaseModel):
+    """Full script JSON for manual set (admin edited content)."""
+    title: str
+    genre: str = "悬疑推理"
+    difficulty: str = "中等"
+    estimated_time: int = 90
+    background_story: str = ""
+    true_killer: str = ""
+    murder_method: str = ""
+    cover_up: str = ""
+    roles: list = []
+    clues: list = []
+    plot_outline: dict = {}
+    private_events: list = []
 
 
 def _normalize_script_json(data: dict) -> dict:
@@ -173,7 +193,7 @@ async def generate_script(game_id: str, req: ScriptGenerationRequest):
 
 
 @router.post("/rooms/{game_id}/set-script")
-async def set_script(game_id: str, req: ScriptGenerationRequest):
+async def set_script(game_id: str, req: SetScriptRequest):
     """手动设置剧本（管理员编辑后保存）"""
     state = _get_manager().get_state(game_id)
     if not state:
@@ -181,7 +201,11 @@ async def set_script(game_id: str, req: ScriptGenerationRequest):
     if state.phase != "waiting":
         raise HTTPException(status_code=400, detail="只能在等待阶段设置剧本")
 
-    _get_manager().set_script(game_id, req)
+    # Convert request to Script model
+    script_data = req.model_dump()
+    script_data = _normalize_script_json(script_data)
+    script = Script(**script_data)
+    _get_manager().set_script(game_id, script)
     state.script_generated = True
 
     for pid, player in state.players.items():
@@ -199,7 +223,7 @@ async def set_script(game_id: str, req: ScriptGenerationRequest):
 
     for pid, player in state.players.items():
         if player.role:
-            await hub.send_to_player(game_id, pid, {
+            await _get_hub().send_to_player(game_id, pid, {
                 "type": "role_card",
                 "layer": "1",
                 "player_id": pid,
@@ -209,4 +233,4 @@ async def set_script(game_id: str, req: ScriptGenerationRequest):
                 },
             })
 
-    return {"status": "saved", "title": req.title}
+    return {"status": "saved", "title": script.title}

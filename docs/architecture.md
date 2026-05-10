@@ -41,7 +41,7 @@ The DI container (`server/di/container.py`) registers core services at startup:
 container.register("llm_client", LLMClient)
 container.register("game_manager", GameManager, singleton=True)
 container.register("websocket_hub", WebSocketHub, singleton=True)
-container.register("host_dm", lambda: HostDM(container.resolve("llm_client")), singleton=True)
+container.register("host_dm", HostDM, singleton=True)  # HostDM creates its own LLMClient internally
 ```
 
 API modules resolve services via `container.resolve("service_name")`. This enables:

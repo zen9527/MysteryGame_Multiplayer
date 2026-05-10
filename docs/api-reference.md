@@ -1,6 +1,6 @@
 # API Reference
 
-All endpoints are prefixed with `/api` (FastAPI `APIRouter` default). The WebSocket endpoint is at the root level.
+All REST endpoints are prefixed with `/api` (set via `include_router(api_router, prefix="/api")` in `main.py`). The WebSocket endpoint is at the root level.
 
 ---
 

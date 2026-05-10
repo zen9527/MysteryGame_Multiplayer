@@ -42,6 +42,8 @@ shared/
   schemas.ts        Zod schemas for frontend validation
 tests/
   conftest.py, test_game_manager.py, test_dm_chat_response.py, test_integration.py
+  test_api_rooms.py, test_api_game.py, test_api_dm.py, test_api_config.py
+  test_websocket_hub.py
 docs/
   superpowers/      Design specs and implementation plans
   architecture.md   Architecture overview
@@ -126,4 +128,10 @@ pytest tests/ -v   # Backend tests (project root is in sys.path via conftest.py)
 
 - `server/websocket_hub.py` still imports `manager` and `host` as module-level singletons instead of using DI container.
 - `server/middleware.py` still imports `manager` directly for `require_admin()` instead of using DI container.
-- `ChatPanel.vue` exists but is unused (replaced by `PublicChatPanel.vue`).
+- **Unused game/ and admin/ components**: `client/src/components/game/` (AccusationPanel, EventDisplay, PlayerList, PublicChatPanel, VotePanel) and `client/src/components/admin/` (AdminConsole, DmLogViewer, ScriptPreview) are scaffold components that are NOT used by GamePage.vue. GamePage.vue implements all functionality inline. These components call `useGameActions()` which delegates to store stub actions (console.log only). Do NOT rely on these components for production behavior.
+- **Store actions are stubs**: `game.ts` store methods `startGame`, `advanceAct`, `forceTrial`, `endGame`, `sendPublicChat`, `submitAccusation`, `castVote`, `requestAdvance` only log to console. GamePage.vue handles all actions directly via fetch/WebSocket. The `useGameActions` composable wraps these stubs.
+- **ScriptPreview.vue** is completely unimplemented (`<p>剧本功能待实现...</p>`).
+- **shared/ws_types.py** is declarative only — Pydantic schemas are defined but not used for WS message validation. The actual WS message format is defined by the server-side code in `websocket_hub.py`.
+- **shared/schemas.ts** duplicates types from `client/src/types/ws.ts` with inconsistencies (missing `player_id` fields). Frontend uses `client/src/types/ws.ts`, not `shared/schemas.ts`.
+- **Consensus threshold**: `check_consensus()` uses `>=` with threshold 0.5, meaning in a 2-player game, 1 vote (50%) triggers consensus. Consider whether strict majority (>50%) is intended.
+- **ChatPanel.vue** exists but is unused (replaced by `PublicChatPanel.vue`).

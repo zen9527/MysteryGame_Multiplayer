@@ -6,32 +6,32 @@ client = TestClient(app)
 
 
 def test_health_check():
-    response = client.get("/health")
+    response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
 
 def test_create_room_with_creator():
-    response = client.post("/rooms", json={"creator_id": "admin_1"})
+    response = client.post("/api/rooms", json={"creator_id": "admin_1"})
     assert response.status_code == 200
     data = response.json()
     assert "game_id" in data
 
 
 def test_list_rooms():
-    client.post("/rooms", json={"creator_id": "admin_1"})
-    response = client.get("/rooms")
+    client.post("/api/rooms", json={"creator_id": "admin_1"})
+    response = client.get("/api/rooms")
     assert response.status_code == 200
     assert len(response.json()) >= 1
 
 
 def test_get_room_not_found():
-    response = client.get("/rooms/nonexistent")
+    response = client.get("/api/rooms/nonexistent")
     assert response.status_code == 404
 
 
 def test_genres_endpoint():
-    response = client.get("/genres")
+    response = client.get("/api/genres")
     assert response.status_code == 200
     data = response.json()
     assert len(data["genres"]) == 6
@@ -39,7 +39,7 @@ def test_genres_endpoint():
 
 
 def test_start_without_script_fails():
-    resp = client.post("/rooms", json={"creator_id": "admin_1"})
+    resp = client.post("/api/rooms", json={"creator_id": "admin_1"})
     game_id = resp.json()["game_id"]
     # Add a player first so we hit the script check, not the player count check
     from server.game_manager import manager
@@ -53,23 +53,23 @@ def test_start_without_script_fails():
     manager.add_player(game_id, "p1", "张三")
     manager.add_player(game_id, "p2", "李四")
 
-    response = client.post(f"/rooms/{game_id}/start")
+    response = client.post(f"/api/rooms/{game_id}/start")
     assert response.status_code == 400
     assert "剧本" in response.json()["detail"]
 
 
 def test_admin_kick_non_admin_fails():
-    resp = client.post("/rooms", json={"creator_id": "admin_1"})
+    resp = client.post("/api/rooms", json={"creator_id": "admin_1"})
     game_id = resp.json()["game_id"]
     response = client.post(
-        f"/rooms/{game_id}/players/p_fake/kick",
+        f"/api/rooms/{game_id}/players/p_fake/kick",
         json={"player_id": "not_admin"},
     )
     assert response.status_code == 403
 
 
 def test_force_trial_by_admin():
-    resp = client.post("/rooms", json={"creator_id": "admin_1"})
+    resp = client.post("/api/rooms", json={"creator_id": "admin_1"})
     game_id = resp.json()["game_id"]
     # Start first (need to set script_generated)
     from server.game_manager import manager
@@ -78,7 +78,7 @@ def test_force_trial_by_admin():
     manager.start_game(game_id)
 
     response = client.post(
-        f"/rooms/{game_id}/force-trial",
+        f"/api/rooms/{game_id}/force-trial",
         json={"player_id": "admin_1"},
     )
     assert response.status_code == 200
@@ -86,7 +86,7 @@ def test_force_trial_by_admin():
 
 
 def test_force_trial_by_non_admin_fails():
-    resp = client.post("/rooms", json={"creator_id": "admin_1"})
+    resp = client.post("/api/rooms", json={"creator_id": "admin_1"})
     game_id = resp.json()["game_id"]
     from server.game_manager import manager
     state = manager.get_state(game_id)
@@ -94,7 +94,7 @@ def test_force_trial_by_non_admin_fails():
     manager.start_game(game_id)
 
     response = client.post(
-        f"/rooms/{game_id}/force-trial",
+        f"/api/rooms/{game_id}/force-trial",
         json={"player_id": "not_admin"},
     )
     assert response.status_code == 403
@@ -107,7 +107,7 @@ def test_end_game_by_admin(monkeypatch):
         lambda state: {"public_event": "真相揭晓", "private_clues": [], "dm_instruction": ""},
     )
 
-    resp = client.post("/rooms", json={"creator_id": "admin_1"})
+    resp = client.post("/api/rooms", json={"creator_id": "admin_1"})
     game_id = resp.json()["game_id"]
     from server.game_manager import manager
     state = manager.get_state(game_id)
@@ -115,7 +115,7 @@ def test_end_game_by_admin(monkeypatch):
     manager.start_game(game_id)
 
     response = client.post(
-        f"/rooms/{game_id}/end-game",
+        f"/api/rooms/{game_id}/end-game",
         json={"player_id": "admin_1"},
     )
     assert response.status_code == 200
@@ -124,9 +124,9 @@ def test_end_game_by_admin(monkeypatch):
 
 
 def test_dm_log_endpoint():
-    resp = client.post("/rooms", json={"creator_id": "admin_1"})
+    resp = client.post("/api/rooms", json={"creator_id": "admin_1"})
     game_id = resp.json()["game_id"]
 
-    response = client.get(f"/rooms/{game_id}/dm/log")
+    response = client.get(f"/api/rooms/{game_id}/dm/log")
     assert response.status_code == 200
     assert "dm_log" in response.json()

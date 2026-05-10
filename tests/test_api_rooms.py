@@ -13,7 +13,7 @@ def _get_manager():
 
 
 def _create_room(creator="admin_1"):
-    resp = client.post("/rooms", json={"creator_id": creator})
+    resp = client.post("/api/rooms", json={"creator_id": creator})
     assert resp.status_code == 200
     return resp.json()["game_id"]
 
@@ -45,7 +45,7 @@ def test_create_room():
 
 def test_list_rooms():
     _create_room()
-    resp = client.get("/rooms")
+    resp = client.get("/api/rooms")
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)
@@ -54,7 +54,7 @@ def test_list_rooms():
 
 def test_get_room_detail():
     game_id = _create_room()
-    resp = client.get(f"/rooms/{game_id}")
+    resp = client.get(f"/api/rooms/{game_id}")
     assert resp.status_code == 200
     data = resp.json()
     assert data["game_id"] == game_id
@@ -64,20 +64,20 @@ def test_get_room_detail():
 
 
 def test_get_room_not_found():
-    resp = client.get("/rooms/nonexistent-room-id")
+    resp = client.get("/api/rooms/nonexistent-room-id")
     assert resp.status_code == 404
 
 
 def test_delete_room():
     game_id = _create_room()
-    resp = client.delete(f"/rooms/{game_id}")
+    resp = client.delete(f"/api/rooms/{game_id}")
     assert resp.status_code == 200
     assert resp.json()["status"] == "deleted"
     assert _get_manager().get_state(game_id) is None
 
 
 def test_delete_nonexistent_room():
-    resp = client.delete("/rooms/nonexistent")
+    resp = client.delete("/api/rooms/nonexistent")
     assert resp.status_code == 200
 
 
@@ -89,20 +89,20 @@ def test_add_player_to_room():
         Role(id="r1", name="角色A", age=30, occupation="医生", description="", background="", secret_task="", alibi="", motive=""),
         Role(id="r2", name="角色B", age=25, occupation="教师", description="", background="", secret_task="", alibi="", motive=""),
     ]
-    resp = client.post(f"/rooms/{game_id}/players", json={"player_id": "p1", "name": "张三"})
+    resp = client.post(f"/api/rooms/{game_id}/players", json={"player_id": "p1", "name": "张三"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["name"] == "张三"
 
 
 def test_add_player_to_nonexistent_room():
-    resp = client.post("/rooms/nonexistent/players", json={"player_id": "p1", "name": "张三"})
+    resp = client.post("/api/rooms/nonexistent/players", json={"player_id": "p1", "name": "张三"})
     assert resp.status_code == 404
 
 
 def test_add_player_room_full():
     game_id = _setup_room_with_script_and_players(2)
-    resp = client.post(f"/rooms/{game_id}/players", json={"player_id": "p3", "name": "王五"})
+    resp = client.post(f"/api/rooms/{game_id}/players", json={"player_id": "p3", "name": "王五"})
     assert resp.status_code == 400
 
 
@@ -114,8 +114,8 @@ def test_list_players():
         Role(id="r1", name="角色A", age=30, occupation="医生", description="", background="", secret_task="", alibi="", motive=""),
         Role(id="r2", name="角色B", age=25, occupation="教师", description="", background="", secret_task="", alibi="", motive=""),
     ]
-    client.post(f"/rooms/{game_id}/players", json={"player_id": "p1", "name": "张三"})
-    resp = client.get(f"/rooms/{game_id}/players")
+    client.post(f"/api/rooms/{game_id}/players", json={"player_id": "p1", "name": "张三"})
+    resp = client.get(f"/api/rooms/{game_id}/players")
     assert resp.status_code == 200
     data = resp.json()
     assert "p1" in data
@@ -123,14 +123,14 @@ def test_list_players():
 
 
 def test_list_players_not_found():
-    resp = client.get("/rooms/nonexistent/players")
+    resp = client.get("/api/rooms/nonexistent/players")
     assert resp.status_code == 404
 
 
 def test_kick_player_admin():
     game_id = _setup_room_with_script_and_players(2)
     resp = client.post(
-        f"/rooms/{game_id}/players/p1/kick",
+        f"/api/rooms/{game_id}/players/p1/kick",
         json={"player_id": "admin_1"},
     )
     assert resp.status_code == 200
@@ -140,7 +140,7 @@ def test_kick_player_admin():
 def test_kick_player_non_admin():
     game_id = _setup_room_with_script_and_players(2)
     resp = client.post(
-        f"/rooms/{game_id}/players/p2/kick",
+        f"/api/rooms/{game_id}/players/p2/kick",
         json={"player_id": "p1"},
     )
     assert resp.status_code == 403
@@ -149,7 +149,7 @@ def test_kick_player_non_admin():
 def test_leave_room():
     game_id = _setup_room_with_script_and_players(2)
     resp = client.post(
-        f"/rooms/{game_id}/leave",
+        f"/api/rooms/{game_id}/leave",
         json={"player_id": "p1", "name": "玩家1"},
     )
     assert resp.status_code == 200
@@ -159,14 +159,14 @@ def test_leave_room():
 def test_leave_room_not_in_room():
     game_id = _create_room()
     resp = client.post(
-        f"/rooms/{game_id}/leave",
+        f"/api/rooms/{game_id}/leave",
         json={"player_id": "nonexistent", "name": "无名"},
     )
     assert resp.status_code == 400
 
 
 def test_genres_endpoint():
-    resp = client.get("/genres")
+    resp = client.get("/api/genres")
     assert resp.status_code == 200
     data = resp.json()
     assert "genres" in data
@@ -178,7 +178,7 @@ def test_get_room_public_messages():
     game_id = _create_room()
     mgr = _get_manager()
     mgr.push_event(game_id, "测试事件消息")
-    resp = client.get(f"/rooms/{game_id}")
+    resp = client.get(f"/api/rooms/{game_id}")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["public_messages"]) >= 1
