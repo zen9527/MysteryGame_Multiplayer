@@ -143,3 +143,8 @@ class GameState(BaseModel):
     distributed_private_chat: dict[str, List[dict]] = Field(default_factory=dict)  # pid -> [{type, from, content, timestamp}, ...]
     distributed_accusations: List[dict] = Field(default_factory=list)  # [{type, from, target, reasoning}, ...]
     dm_chat_cooldowns: dict[str, datetime] = Field(default_factory=dict)  # player_id -> last chat time
+
+    # Auto-DM fields
+    dm_auto: bool = True
+    last_player_activity: Optional[datetime] = None
+    dm_intervention_history: List[dict] = Field(default_factory=list)
