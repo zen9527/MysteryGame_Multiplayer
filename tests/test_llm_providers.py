@@ -185,3 +185,32 @@ def test_anthropic_get_config():
     config = provider.get_config()
     assert config["type"] == "anthropic"
     assert config["api_key_set"] is True
+
+
+# --- Gemini Provider tests ---
+
+from server.llm.gemini_provider import GeminiProvider
+
+
+@patch("server.llm.gemini_provider.requests.post")
+def test_gemini_chat(mock_post):
+    mock_post.return_value = _mock_response(200, {
+        "candidates": [{"content": {"parts": [{"text": "Gemini response"}]}}]
+    })
+    provider = GeminiProvider("test-gemini", "https://generativelanguage.googleapis.com", "gemini-2.0-flash", "AIza-test")
+    result = provider.chat([{"role": "user", "content": "Hi"}])
+    assert result == "Gemini response"
+    call_url = mock_post.call_args[0][0]
+    assert "gemini-2.0-flash:generateContent" in call_url
+
+
+def test_gemini_provider_type():
+    provider = GeminiProvider("test", "https://generativelanguage.googleapis.com", "gemini-2.0-flash", "key")
+    assert provider.provider_type == "gemini"
+
+
+def test_gemini_get_config():
+    provider = GeminiProvider("my-gemini", "https://generativelanguage.googleapis.com", "gemini-2.0-flash", "AIza-12345678")
+    config = provider.get_config()
+    assert config["type"] == "gemini"
+    assert config["api_key_set"] is True
