@@ -28,11 +28,24 @@ def register_services(container):
     from server.game_manager import GameManager
     from server.websocket_hub import WebSocketHub
     from server.host_dm import HostDM
-    from server.llm_client import LLMClient
     from server.script_repository import ScriptRepository
     from server.script_service import ScriptService
+    from server.llm.registry import LLMRegistry
+    from server.llm.openai_provider import OpenAIProvider
+    from server.config import config as app_config
 
-    container.register("llm_client", LLMClient)
+    def _create_registry():
+        registry = LLMRegistry()
+        default = OpenAIProvider(
+            name="default",
+            endpoint=app_config.LLM_ENDPOINT,
+            model=app_config.LLM_MODEL,
+            api_key=app_config.LLM_API_KEY,
+        )
+        registry.register("default", default)
+        return registry
+
+    container.register("llm_registry", _create_registry, singleton=True)
     container.register("game_manager", GameManager, singleton=True)
     container.register("websocket_hub", WebSocketHub, singleton=True)
     container.register("host_dm", HostDM, singleton=True)
