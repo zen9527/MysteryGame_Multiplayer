@@ -214,3 +214,101 @@ def test_gemini_get_config():
     config = provider.get_config()
     assert config["type"] == "gemini"
     assert config["api_key_set"] is True
+
+
+# --- LLMRegistry tests ---
+
+from server.llm.registry import LLMRegistry
+
+
+def _make_stub(name="stub", **kw):
+    return StubProvider(name, **kw)
+
+
+def test_registry_register_and_get():
+    reg = LLMRegistry()
+    p = _make_stub("test-p")
+    reg.register("test-p", p)
+    assert reg.get_active() is p
+
+
+def test_registry_first_registered_is_active():
+    reg = LLMRegistry()
+    reg.register("a", _make_stub("a"))
+    reg.register("b", _make_stub("b"))
+    assert reg.get_active().name == "a"
+
+
+def test_registry_set_active():
+    reg = LLMRegistry()
+    reg.register("a", _make_stub("a"))
+    reg.register("b", _make_stub("b"))
+    reg.set_active("b")
+    assert reg.get_active().name == "b"
+
+
+def test_registry_set_active_not_found():
+    reg = LLMRegistry()
+    with pytest.raises(ValueError, match="not registered"):
+        reg.set_active("nonexistent")
+
+
+def test_registry_get_active_empty():
+    reg = LLMRegistry()
+    with pytest.raises(ValueError, match="No providers"):
+        reg.get_active()
+
+
+def test_registry_remove():
+    reg = LLMRegistry()
+    reg.register("a", _make_stub("a"))
+    reg.register("b", _make_stub("b"))
+    reg.set_active("b")
+    reg.remove("b")
+    assert reg.get_active().name == "a"
+
+
+def test_registry_remove_active_no_fallback():
+    reg = LLMRegistry()
+    reg.register("a", _make_stub("a"))
+    reg.remove("a")
+    with pytest.raises(ValueError, match="No providers"):
+        reg.get_active()
+
+
+def test_registry_list_providers():
+    reg = LLMRegistry()
+    reg.register("local", _make_stub("local"))
+    reg.register("cloud", _make_stub("cloud"))
+    reg.set_active("cloud")
+    result = reg.list_providers()
+    assert len(result) == 2
+    cloud = next(p for p in result if p["name"] == "cloud")
+    assert cloud["is_active"] is True
+    local = next(p for p in result if p["name"] == "local")
+    assert local["is_active"] is False
+
+
+def test_registry_create_provider_openai():
+    reg = LLMRegistry()
+    p = reg.create_provider("openai", "test", endpoint="http://localhost:12340", model="gpt-4", api_key="sk-test")
+    assert isinstance(p, OpenAIProvider)
+    assert p.name == "test"
+
+
+def test_registry_create_provider_anthropic():
+    reg = LLMRegistry()
+    p = reg.create_provider("anthropic", "claude", endpoint="https://api.anthropic.com", model="claude-sonnet-4-6", api_key="sk-ant")
+    assert isinstance(p, AnthropicProvider)
+
+
+def test_registry_create_provider_gemini():
+    reg = LLMRegistry()
+    p = reg.create_provider("gemini", "gemini", endpoint="https://generativelanguage.googleapis.com", model="gemini-2.0-flash", api_key="AIza-test")
+    assert isinstance(p, GeminiProvider)
+
+
+def test_registry_create_provider_unknown():
+    reg = LLMRegistry()
+    with pytest.raises(ValueError, match="Unknown provider type"):
+        reg.create_provider("unknown", "x", endpoint="", model="")
