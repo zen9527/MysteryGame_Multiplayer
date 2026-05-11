@@ -130,3 +130,175 @@ def test_dm_log_endpoint():
     response = client.get(f"/api/rooms/{game_id}/dm/log")
     assert response.status_code == 200
     assert "dm_log" in response.json()
+
+
+def test_script_upload_list_detail_flow():
+    """Test complete script flow: upload → list → detail → create room"""
+    # Step 1: Upload a script (admin action)
+    script_data = {
+        "title": "Integration Test Script",
+        "genre": "悬疑推理",
+        "difficulty": "中等",
+        "player_count": 6,
+        "estimated_time": 120,
+        "background_story": "这是一个用于集成测试的剧本背景故事。在一个豪华庄园里，发生了一起神秘谋杀案...",
+        "true_killer": "角色 A",
+        "murder_method": "毒药",
+        "cover_up": "伪装成意外",
+        "roles": [
+            {
+                "id": "1",
+                "name": "角色 A",
+                "age": 35,
+                "occupation": "商人",
+                "description": "富有的商人，与死者有商业纠纷",
+                "background": "背景故事 A",
+                "secret_task": "秘密任务 A",
+                "alibi": "不在场证明 A",
+                "motive": "商业纠纷"
+            },
+            {
+                "id": "2",
+                "name": "角色 B",
+                "age": 28,
+                "occupation": "医生",
+                "description": "庄园的私人医生",
+                "background": "背景故事 B",
+                "secret_task": "秘密任务 B",
+                "alibi": "不在场证明 B",
+                "motive": "医疗纠纷"
+            }
+        ],
+        "clues": [
+            {
+                "id": "1",
+                "title": "毒药瓶",
+                "content": "在死者房间发现一个空毒药瓶",
+                "target_role": "角色 A",
+                "is_red_herring": False,
+                "content_hint": "与商人有关",
+                "unlock_phase": "act1"
+            }
+        ],
+        "plot_outline": {
+            "act1": "第一幕：发现尸体，初步调查",
+            "act2": "第二幕：深入调查，揭露秘密",
+            "act3": "第三幕：指认凶手，真相大白"
+        },
+        "private_events": []
+    }
+
+    response = client.post("/api/scripts", json=script_data, params={"admin_key": "admin_secret_key"})
+    assert response.status_code == 200, f"Upload failed: {response.text}"
+    script_id = response.json()["script_id"]
+
+    # Step 2: List scripts (public endpoint)
+    response = client.get("/api/scripts")
+    assert response.status_code == 200
+    scripts = response.json()["scripts"]
+    assert any(s["id"] == script_id for s in scripts)
+
+    # Verify metadata only (no sensitive fields)
+    script_metadata = next(s for s in scripts if s["id"] == script_id)
+    assert "true_killer" not in script_metadata
+    assert "clues" not in script_metadata
+    assert "murder_method" not in script_metadata
+
+    # Step 3: Get detail (public endpoint, masked)
+    response = client.get(f"/api/scripts/{script_id}")
+    assert response.status_code == 200
+    detail = response.json()
+
+    assert detail["title"] == "Integration Test Script"
+    assert detail["genre"] == "悬疑推理"
+    assert len(detail["roles"]) == 2
+    assert "plot_outline" in detail
+
+    # Verify sensitive fields are masked
+    assert "true_killer" not in detail
+    assert "murder_method" not in detail
+    assert "clues" not in detail
+    assert "private_events" not in detail
+
+    # Step 4: Create room with script (public endpoint)
+    response = client.post("/api/rooms", json={
+        "name": "Test Admin",
+        "creator_id": "admin-1",
+        "script_id": script_id
+    })
+    assert response.status_code == 200
+    game_id = response.json()["game_id"]
+
+    # Step 5: Verify room was created with correct script
+    response = client.get(f"/api/rooms/{game_id}")
+    assert response.status_code == 200
+    room = response.json()
+
+    assert room["script"]["title"] == "Integration Test Script"
+    assert room["script_generated"] == True
+
+    # Step 6: Verify script can be filtered
+    response = client.get("/api/scripts?genre=悬疑推理")
+    assert response.status_code == 200
+    filtered_scripts = response.json()["scripts"]
+    assert any(s["id"] == script_id for s in filtered_scripts)
+
+    response = client.get("/api/scripts?difficulty=中等")
+    assert response.status_code == 200
+    filtered_scripts = response.json()["scripts"]
+    assert any(s["id"] == script_id for s in filtered_scripts)
+
+    # Step 7: Test soft delete
+    response = client.delete(f"/api/scripts/{script_id}", params={"admin_key": "admin_secret_key"})
+    assert response.status_code == 200
+
+    # Verify script is no longer listed
+    response = client.get("/api/scripts")
+    scripts = response.json()["scripts"]
+    assert not any(s["id"] == script_id for s in scripts)
+
+    # Verify script cannot be retrieved
+    response = client.get(f"/api/scripts/{script_id}")
+    assert response.status_code == 404
+
+
+def test_export_import_roundtrip():
+    """Test export and import functionality"""
+    # Upload a script
+    script_data = {
+        "title": "Export Test",
+        "genre": "古风权谋",
+        "difficulty": "困难",
+        "player_count": 8,
+        "estimated_time": 150,
+        "background_story": "Test",
+        "true_killer": "角色 A",
+        "murder_method": "测试",
+        "cover_up": "测试",
+        "roles": [{"id": "1", "name": "角色 A", "age": 30, "occupation": "测试", 
+                   "description": "描述", "background": "背景", "secret_task": "任务", "alibi": "不在场证明", "motive": "动机"}],
+        "clues": [],
+        "plot_outline": {"act1": "第一幕", "act2": "第二幕", "act3": "第三幕"}
+    }
+
+    response = client.post("/api/scripts", json=script_data, params={"admin_key": "admin_secret_key"})
+    script_id = response.json()["script_id"]
+
+    # Export all scripts
+    response = client.get("/api/scripts/export", params={"admin_key": "admin_secret_key"})
+    assert response.status_code == 200
+    exported = response.json()["scripts"]
+    assert len(exported) >= 1
+
+    # Delete the script
+    client.delete(f"/api/scripts/{script_id}", params={"admin_key": "admin_secret_key"})
+
+    # Import back
+    response = client.post("/api/scripts/import", json={"scripts": exported}, params={"admin_key": "admin_secret_key"})
+    assert response.status_code == 200
+    assert response.json()["imported"] >= 1
+
+    # Verify script is back
+    response = client.get("/api/scripts")
+    scripts = response.json()["scripts"]
+    assert any(s["title"] == "Export Test" for s in scripts)

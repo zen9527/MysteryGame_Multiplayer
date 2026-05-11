@@ -224,9 +224,12 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, player_id: str)
             await hub.handle_client_message(room_id, player_id, data)
     except WebSocketDisconnect:
         if state and player_id in state.players:
+            player_name = state.players[player_id].name
+            hub.disconnect(websocket)
             await hub.broadcast(room_id, {
                 "type": "player_left",
                 "player_id": player_id,
-                "player_name": state.players[player_id].name,
+                "player_name": player_name,
             })
-        hub.disconnect(websocket)
+        else:
+            hub.disconnect(websocket)

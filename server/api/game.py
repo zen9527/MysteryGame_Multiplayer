@@ -99,7 +99,10 @@ async def _auto_generate_opening(game_id: str):
     if not state or state.phase != "playing":
         return
     try:
-        event = await asyncio.to_thread(_get_host_dm().generate_event, state)
+        event = await asyncio.wait_for(
+            asyncio.to_thread(_get_host_dm().generate_event, state),
+            timeout=60,
+        )
         result = _get_manager().push_structured_event(game_id, event)
         if result:
             if result["public_event"]:
@@ -109,6 +112,8 @@ async def _auto_generate_opening(game_id: str):
                 })
             for clue in result["private_clues"]:
                 await _get_hub().send_dm_private(game_id, clue["player_id"], clue["content"])
+    except asyncio.TimeoutError:
+        _get_manager().add_dm_log(game_id, "开场白生成超时（60s）")
     except Exception as e:
         _get_manager().add_dm_log(game_id, f"开场白生成失败：{e}")
 

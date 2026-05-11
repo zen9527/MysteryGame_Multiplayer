@@ -152,17 +152,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { useGameStore } from '../stores/game';
 import { storeToRefs } from 'pinia';
 import {
   REQUEST_CLUE_TIMEOUT,
-  RECONNECT_DELAY,
   FETCH_STATE_INTERVAL,
-  WS_SEND_RETRIES,
-  WS_SEND_RETRY_DELAY,
 } from '../constants';
+import { WebSocketManager } from '../utils/ws';
 import GameTimer from './GameTimer.vue';
 import AdminPanel from './AdminPanel.vue';
 import RoleCard from './RoleCard.vue';
@@ -174,22 +172,7 @@ const gameId = route.params.gameId as string;
 const playerId = localStorage.getItem(`player_${gameId}`) || localStorage.getItem(`admin_${gameId}`) || localStorage.getItem('player_id') || '';
 
 const store = useGameStore();
-const { phase: storePhase, act: storeAct, currentEvent: storeCurrentEvent, activeTab: storeActiveTab, players: storePlayers, publicMessages: storePublicMessages } = storeToRefs(store);
-
-// Local refs synced bidirectionally with store
-const phase = ref<'waiting' | 'playing' | 'trial' | 'revealed' | 'finished'>('playing');
-const act = ref(1);
-const currentEvent = ref('');
-const activeTab = ref(storeActiveTab.value);
-watch(storeActiveTab, (v) => { activeTab.value = v; });
-const playersMap = computed(() => storePlayers.value);
-  const publicMessages = computed(() => storePublicMessages.value);
-  const actBanner = computed(() => store.actBanner);
-
-// Store → Local (WS messages update store, watchers sync to local)
-watch(storePhase, (v) => { phase.value = v; });
-watch(storeAct, (v) => { act.value = v; });
-watch(storeCurrentEvent, (v) => { currentEvent.value = v; });
+const { phase, act, currentEvent, activeTab, players: storePlayers, publicMessages, actBanner } = storeToRefs(store);
 
 // State local to this component
 const scriptTitle = ref('');
@@ -234,12 +217,12 @@ const adminLoading = computed(() =>
 );
 
 // WebSocket
-let ws: WebSocket | null = null;
+let wsManager: WebSocketManager | null = null;
 const messageContainer = ref<HTMLElement | null>(null);
 
 // Convert players Map to array with keys for v-for
 const playersList = computed<Array<{ pid: string; name: string; role_id: string }>>(() => {
-  return Array.from(playersMap.value.entries()).map(([pid, p]) => ({ pid: pid as string, ...p }));
+  return Array.from(storePlayers.value.entries()).map(([pid, p]) => ({ pid: pid as string, ...p }));
 });
 
 const phaseText = computed(() => {
@@ -276,7 +259,7 @@ async function fetchState() {
 
     // Update players in store
     for (const [pid, p] of Object.entries(data.players || {})) {
-      playersMap.value.set(pid, { name: (p as any).name, role_id: (p as any).role_id });
+      storePlayers.value.set(pid, { name: (p as any).name, role_id: (p as any).role_id });
     }
 
     // Load public messages from API into store (deduplicated)
@@ -293,43 +276,35 @@ async function fetchState() {
   }
 }
 
-// WebSocket connection
+// WebSocket connection using WebSocketManager with exponential backoff
 function connectWebSocket() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${window.location.host}/ws/${gameId}/${playerId}`);
+  wsManager = new WebSocketManager(gameId, playerId);
 
-  ws.onopen = () => console.log('WS connected');
+  wsManager.connect(
+    (msg) => {
+      // Route through store for state management
+      store.handleWSMessage(msg as any);
 
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    // Route through store for state management
-    store.handleWSMessage(msg as any);
+      // Clear requestingClue when an event comes back from DM
+      if (msg.type === 'event') {
+        requestingClue.value = false;
+      }
 
-    // Clear requestingClue when an event comes back from DM
-    if (msg.type === 'event') {
-      requestingClue.value = false;
+      // Scroll to bottom for any chat/event messages
+      if (msg.type === 'chat' || msg.type === 'event') {
+        nextTick(() => {
+          if (messageContainer.value) messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
+        });
+      }
+    },
+    () => {
+      console.log('WS disconnected, max reconnect attempts reached');
     }
-
-    // Scroll to bottom for any chat/event messages
-    if (msg.type === 'chat' || msg.type === 'event') {
-      nextTick(() => {
-        if (messageContainer.value) messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
-      });
-    }
-  };
-
-  ws.onclose = () => {
-    console.log('WS disconnected, reconnecting...');
-    setTimeout(connectWebSocket, RECONNECT_DELAY);
-  };
+  );
 }
 
-function sendWSMessage(type: string, data: Record<string, any> = {}, retries = 0) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type, ...data }));
-  } else if (ws && retries < WS_SEND_RETRIES) {
-    setTimeout(() => sendWSMessage(type, data, retries + 1), WS_SEND_RETRY_DELAY);
-  }
+function sendWSMessage(type: string, data: Record<string, any> = {}) {
+  wsManager?.send({ type, ...data });
 }
 
 // Send public chat (WS only — server handles persistence)
@@ -597,7 +572,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (ws) ws.close();
+  wsManager?.disconnect();
 });
 </script>
 

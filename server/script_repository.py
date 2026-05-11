@@ -8,7 +8,13 @@ class ScriptRepository:
     """SQLite repository for script persistence"""
     
     def __init__(self, db_path: str = "scripts.db"):
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        import sys
+        if sys.platform == "win32":
+            # Windows SQLite needs UTF-8 encoding for Chinese characters
+            self.conn = sqlite3.connect(db_path, check_same_thread=False, uri=True)
+            self.conn.execute("PRAGMA encoding='UTF-8'")
+        else:
+            self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_db()
     

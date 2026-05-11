@@ -1,4 +1,5 @@
 import re
+import html
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -6,9 +7,21 @@ MAX_PLAYER_NAME_LENGTH = 20
 MAX_CHAT_LENGTH = 500
 MAX_REASONING_LENGTH = 1000
 
+# Dangerous patterns to strip from user input
+_DANGEROUS_PATTERNS = [
+    re.compile(r'<[^>]*>'),                      # HTML tags
+    re.compile(r'javascript\s*:', re.IGNORECASE), # javascript: URIs
+    re.compile(r'on\w+\s*=', re.IGNORECASE),      # Event handlers (onclick=, onerror=, etc.)
+    re.compile(r'data\s*:\s*text/html', re.IGNORECASE),  # data:text/html URIs
+]
+
 
 def sanitize_string(value: str) -> str:
-    value = re.sub(r'<[^>]*>', '', value)
+    """Sanitize user input: strip HTML tags, event handlers, and dangerous URIs."""
+    for pattern in _DANGEROUS_PATTERNS:
+        value = pattern.sub('', value)
+    # HTML-escape remaining special characters as a safety net
+    value = html.escape(value, quote=False)
     return value.strip()
 
 

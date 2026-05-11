@@ -4,15 +4,26 @@ from server.constants import (
     CONSENSUS_THRESHOLD,
     VALID_PHASES,
     ACT_UNLOCK_MAP,
+    MAX_PUBLIC_MESSAGE_HISTORY,
 )
 from datetime import datetime, timedelta
 from typing import Optional
+import threading
+import logging
 from server.di import container
+
+log = logging.getLogger(__name__)
 
 
 class GameManager:
     def __init__(self):
         self.games: dict[str, GameState] = {}
+        self._locks: dict[str, threading.RLock] = {}
+
+    def _get_lock(self, game_id: str) -> threading.RLock:
+        if game_id not in self._locks:
+            self._locks[game_id] = threading.RLock()
+        return self._locks[game_id]
 
     def create_game(self, game_id: str, creator_id: str, script_id: Optional[str] = None) -> GameState:
         """创建房间，可选使用已存储的剧本"""
@@ -41,12 +52,15 @@ class GameManager:
                     script_full = repo.get(script_id)
                     if script_full and script_full.get("full_content"):
                         placeholder_script = Script(**script_full["full_content"])
+                        state_script_generated = True
                     else:
-                        pass  # Fall back to placeholder
+                        state_script_generated = False
                 else:
-                    pass  # Fall back to placeholder
+                    state_script_generated = False
             except Exception:
-                pass  # Fall back to placeholder
+                state_script_generated = False
+        else:
+            state_script_generated = False
         
         state = GameState(
             game_id=game_id,
@@ -57,52 +71,56 @@ class GameManager:
             script=placeholder_script,
             script_id=script_id,
             timer_start=datetime.now(),
+            script_generated=state_script_generated,
         )
         self.games[game_id] = state
         return state
 
     def add_player(self, game_id: str, player_id: str, player_name: str) -> Optional[Player]:
-        if game_id not in self.games:
-            return None
-        state = self.games[game_id]
-        # If script not yet generated (placeholder has no roles), allow joining without role
-        if not state.script.roles:
-            player = Player(id=player_id, name=player_name, role_id="", role=None)
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return None
+            state = self.games[game_id]
+            # If script not yet generated (placeholder has no roles), allow joining without role
+            if not state.script.roles:
+                player = Player(id=player_id, name=player_name, role_id="", role=None)
+                state.players[player_id] = player
+                return player
+            # Count all players to assign roles correctly
+            if len(state.players) >= min(len(state.script.roles), MAX_PLAYERS_PER_ROOM):
+                return None
+            role = state.script.roles[len(state.players)]
+            player = Player(
+                id=player_id,
+                name=player_name,
+                role_id=role.id,
+                role=role,
+            )
             state.players[player_id] = player
             return player
-        # Count all players to assign roles correctly
-        if len(state.players) >= min(len(state.script.roles), MAX_PLAYERS_PER_ROOM):
-            return None
-        role = state.script.roles[len(state.players)]
-        player = Player(
-            id=player_id,
-            name=player_name,
-            role_id=role.id,
-            role=role,
-        )
-        state.players[player_id] = player
-        return player
 
     def set_script(self, game_id: str, script: Script):
         """设置剧本（LLM 生成后），重新分配角色给所有玩家"""
-        if game_id in self.games:
-            state = self.games[game_id]
-            state.script = script
-            role_idx = 0
-            for pid, player in state.players.items():
-                if role_idx < len(script.roles):
-                    new_role = script.roles[role_idx]
-                    player.role_id = new_role.id
-                    player.role = new_role
-                    role_idx += 1
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                state = self.games[game_id]
+                state.script = script
+                role_idx = 0
+                for pid, player in state.players.items():
+                    if role_idx < len(script.roles):
+                        new_role = script.roles[role_idx]
+                        player.role_id = new_role.id
+                        player.role = new_role
+                        role_idx += 1
 
     def start_game(self, game_id: str):
-        if game_id in self.games:
-            state = self.games[game_id]
-            state.phase = "playing"
-            state.act = 1
-            state.timer_start = datetime.now()
-            return len(state.players)
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                state = self.games[game_id]
+                state.phase = "playing"
+                state.act = 1
+                state.timer_start = datetime.now()
+                return len(state.players)
 
     def is_admin(self, game_id: str, player_id: str) -> bool:
         """检查是否为管理员"""
@@ -112,37 +130,46 @@ class GameManager:
 
     def kick_player(self, game_id: str, player_id_to_kick: str):
         """踢出玩家（仅管理员）"""
-        if game_id in self.games:
-            state = self.games[game_id]
-            if player_id_to_kick in state.players:
-                del state.players[player_id_to_kick]
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                state = self.games[game_id]
+                if player_id_to_kick in state.players:
+                    del state.players[player_id_to_kick]
 
     def force_trial(self, game_id: str):
         """强制进入审判阶段（仅管理员）"""
-        if game_id in self.games:
-            state = self.games[game_id]
-            state.phase = "trial"
-            state.act = 3
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                state = self.games[game_id]
+                state.phase = "trial"
+                state.act = 3
 
     def end_game(self, game_id: str):
         """提前结束游戏，揭晓真相（仅管理员）"""
-        if game_id in self.games:
-            state = self.games[game_id]
-            state.phase = "revealed"
-            state.act = 3
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                state = self.games[game_id]
+                state.phase = "revealed"
+                state.act = 3
+                # Truncate messages for ended game
+                if len(state.public_messages) > MAX_PUBLIC_MESSAGE_HISTORY:
+                    state.public_messages = state.public_messages[-MAX_PUBLIC_MESSAGE_HISTORY:]
+                if len(state.host_message_history) > 50:
+                    state.host_message_history = state.host_message_history[-50:]
 
     def push_event(self, game_id: str, event_content: str):
         """DM推送事件到游戏（手动或自动）"""
-        if game_id not in self.games:
-            return
-        state = self.games[game_id]
-        msg = Message(
-            from_player_id="__dm__",
-            content=event_content,
-            type="event",
-        )
-        state.public_messages.append(msg)
-        state.host_message_history.append(event_content)
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return
+            state = self.games[game_id]
+            msg = Message(
+                from_player_id="__dm__",
+                content=event_content,
+                type="event",
+            )
+            state.public_messages.append(msg)
+            state.host_message_history.append(event_content)
 
     def push_structured_event(self, game_id: str, event: dict):
         """DM推送结构化事件：public_event -> 公屏, private_clues -> 私信, dm_instruction -> DM日志。
@@ -157,150 +184,223 @@ class GameManager:
             "private_clues": [{"player_id": str, "content": str}, ...],
         }
         """
-        if game_id not in self.games:
-            return None
-        state = self.games[game_id]
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return None
+            state = self.games[game_id]
 
-        public_event = event.get("public_event", "")
-        private_clues = event.get("private_clues", [])
-        dm_instruction = event.get("dm_instruction", "")
+            public_event = event.get("public_event", "")
+            private_clues = event.get("private_clues", [])
+            dm_instruction = event.get("dm_instruction", "")
 
-        # Public event -> public_messages + host history
-        if public_event:
-            msg = Message(
-                from_player_id="__dm__",
-                content=public_event,
-                type="event",
-            )
-            state.public_messages.append(msg)
-            state.host_message_history.append(public_event)
+            # Public event -> public_messages + host history
+            if public_event:
+                msg = Message(
+                    from_player_id="__dm__",
+                    content=public_event,
+                    type="event",
+                )
+                state.public_messages.append(msg)
+                state.host_message_history.append(public_event)
 
-        # DM instruction -> DM log only (not visible to players)
-        if dm_instruction:
-            state.dm_log.append(f"[第{state.current_round}轮] {dm_instruction}")
+            # DM instruction -> DM log only (not visible to players)
+            if dm_instruction:
+                state.dm_log.append(f"[第{state.current_round}轮] {dm_instruction}")
 
-        # Private clues -> match role name to player_id -> private messages
-        resolved_clues = []
-        for clue in private_clues:
-            role_name = clue.get("role", "")
-            content = clue.get("content", "")
-            if not role_name or not content:
-                continue
-            # Find player(s) with this role name
-            for pid, player in state.players.items():
-                if player.role and player.role.name == role_name:
-                    priv_msg = Message(
-                        from_player_id="__dm__",
-                        content=content,
-                        type="private",
-                        to_player_id=pid,
-                    )
-                    state.private_messages.append(priv_msg)
-                    resolved_clues.append({"player_id": pid, "content": content})
+            # Private clues -> match role name to player_id -> private messages
+            resolved_clues = []
+            for clue in private_clues:
+                role_name = clue.get("role", "")
+                content = clue.get("content", "")
+                if not role_name or not content:
+                    continue
+                # Find player(s) with this role name
+                for pid, player in state.players.items():
+                    if player.role and player.role.name == role_name:
+                        priv_msg = Message(
+                            from_player_id="__dm__",
+                            content=content,
+                            type="private",
+                            to_player_id=pid,
+                        )
+                        state.private_messages.append(priv_msg)
+                        resolved_clues.append({"player_id": pid, "content": content})
 
-                    # Cache for WS reconnect
-                    if pid not in state.distributed_dm_private:
-                        state.distributed_dm_private[pid] = []
-                    state.distributed_dm_private[pid].append({
-                        "type": "dm_private",
-                        "from": "__dm__",
-                        "to": pid,
-                        "content": content,
-                    })
+                        # Cache for WS reconnect
+                        if pid not in state.distributed_dm_private:
+                            state.distributed_dm_private[pid] = []
+                        state.distributed_dm_private[pid].append({
+                            "type": "dm_private",
+                            "from": "__dm__",
+                            "to": pid,
+                            "content": content,
+                        })
 
-                    break  # One player per role
+                        break  # One player per role
 
-        return {
-            "public_event": public_event,
-            "private_clues": resolved_clues,
-        }
+            return {
+                "public_event": public_event,
+                "private_clues": resolved_clues,
+            }
 
     def add_clue(self, game_id: str, clue_title: str, clue_content: str):
         """管理员追加自定义线索"""
-        if game_id not in self.games:
-            return
-        clue = Clue(title=clue_title, content=clue_content, content_hint="")
-        self.games[game_id].script.clues.append(clue)
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return
+            clue = Clue(title=clue_title, content=clue_content, content_hint="")
+            self.games[game_id].script.clues.append(clue)
 
     def add_dm_log(self, game_id: str, log_entry: str):
         """记录LLM推理日志"""
-        if game_id in self.games:
-            self.games[game_id].dm_log.append(log_entry)
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                self.games[game_id].dm_log.append(log_entry)
 
     # --- Existing methods (unchanged) ---
 
     def add_message(self, game_id: str, message: Message):
-        if game_id in self.games:
-            state = self.games[game_id]
-            if message.type in ("public", "system", "event"):
-                state.public_messages.append(message)
-            elif message.type == "private":
-                state.private_messages.append(message)
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                state = self.games[game_id]
+                if message.type in ("public", "system", "event"):
+                    state.public_messages.append(message)
+                elif message.type == "private":
+                    state.private_messages.append(message)
 
     def add_chat_message(self, game_id: str, player_id: str, content: str, is_private: bool = False, target_player_id: Optional[str] = None):
         """快捷发送聊天消息（从 API 调用）"""
-        if game_id not in self.games:
-            return
-        state = self.games[game_id]
-        msg = Message(
-            from_player_id=player_id,
-            content=content,
-            type="private" if is_private else "public",
-            to_player_id=target_player_id,
-        )
-        self.add_message(game_id, msg)
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return
+            state = self.games[game_id]
+            msg = Message(
+                from_player_id=player_id,
+                content=content,
+                type="private" if is_private else "public",
+                to_player_id=target_player_id,
+            )
+            self.add_message(game_id, msg)
 
     def add_dm_chat_response(self, game_id: str, player_id: str, player_message: str, dm_reply: str):
         """Store DM's chat response in private_messages and cache for WS reconnect."""
-        if game_id not in self.games:
-            return
-        state = self.games[game_id]
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return
+            state = self.games[game_id]
 
-        # Store DM reply as private message
-        reply_msg = Message(
-            from_player_id="__dm__",
-            content=dm_reply,
-            type="private",
-            to_player_id=player_id,
-        )
-        state.private_messages.append(reply_msg)
+            # Store DM reply as private message
+            reply_msg = Message(
+                from_player_id="__dm__",
+                content=dm_reply,
+                type="private",
+                to_player_id=player_id,
+            )
+            state.private_messages.append(reply_msg)
 
-        # Cache for WS reconnect
-        if player_id not in state.distributed_dm_private:
-            state.distributed_dm_private[player_id] = []
-        state.distributed_dm_private[player_id].append({
-            "type": "dm_private",
-            "from": "__dm__",
-            "to": player_id,
-            "content": dm_reply,
-        })
+            # Cache for WS reconnect
+            if player_id not in state.distributed_dm_private:
+                state.distributed_dm_private[player_id] = []
+            state.distributed_dm_private[player_id].append({
+                "type": "dm_private",
+                "from": "__dm__",
+                "to": player_id,
+                "content": dm_reply,
+            })
 
     def add_accusation(self, game_id: str, accusation: Accusation):
-        if game_id in self.games:
-            self.games[game_id].accusations.append(accusation)
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                self.games[game_id].accusations.append(accusation)
 
     def add_vote(self, game_id: str, vote: Vote):
-        if game_id in self.games:
-            self.games[game_id].votes.append(vote)
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                self.games[game_id].votes.append(vote)
 
     def check_consensus(self, game_id: str) -> bool:
-        """检查是否达成共识（≥50% 玩家指控同一人）"""
-        if game_id not in self.games:
+        """检查是否达成共识（排除管理员，≥50% 普通玩家指控同一人）"""
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return False
+            state = self.games[game_id]
+            if not state.votes:
+                return False
+            vote_counts: dict[str, int] = {}
+            for vote in state.votes:
+                vote_counts[vote.target_role_name] = vote_counts.get(vote.target_role_name, 0) + 1
+            # Exclude admin from total player count for consensus calculation
+            non_admin_players = {pid: p for pid, p in state.players.items() if pid != state.room_creator_id}
+            total_players = len(non_admin_players)
+            if total_players == 0:
+                return False
+            for count in vote_counts.values():
+                if count >= total_players * CONSENSUS_THRESHOLD:
+                    return True
             return False
-        state = self.games[game_id]
-        if not state.votes:
-            return False
-        vote_counts: dict[str, int] = {}
-        for vote in state.votes:
-            vote_counts[vote.target_role_name] = vote_counts.get(vote.target_role_name, 0) + 1
-        total_players = len(state.players)  # All players count (including admin)
-        for count in vote_counts.values():
-            if count >= total_players * CONSENSUS_THRESHOLD:
-                return True
-        return False
 
     def get_state(self, game_id: str) -> Optional[GameState]:
         return self.games.get(game_id)
+
+    def cleanup_game(self, game_id: str):
+        """Truncate message lists and clear caches for ended games to prevent memory growth."""
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return
+            state = self.games[game_id]
+            # Truncate message histories
+            if len(state.public_messages) > MAX_PUBLIC_MESSAGE_HISTORY:
+                state.public_messages = state.public_messages[-MAX_PUBLIC_MESSAGE_HISTORY:]
+            if len(state.host_message_history) > 50:
+                state.host_message_history = state.host_message_history[-50:]
+            if len(state.dm_log) > 100:
+                state.dm_log = state.dm_log[-100:]
+            if len(state.private_messages) > 200:
+                state.private_messages = state.private_messages[-200:]
+
+    def cleanup_all(self):
+        """Cleanup all ended games and truncate message lists. Call periodically."""
+        ended_phases = {"revealed", "finished"}
+        to_remove = []
+        for game_id, state in self.games.items():
+            if state.phase in ended_phases:
+                # Fully remove ended games
+                with self._get_lock(game_id):
+                    del self.games[game_id]
+                    if game_id in self._locks:
+                        del self._locks[game_id]
+                log.info(f"[GameManager] Removed ended game {game_id} (phase={state.phase})")
+                to_remove.append(game_id)
+                continue
+            # Truncate messages for active games
+            self.cleanup_game(game_id)
+        return to_remove
+
+    def cleanup_abandoned(self, max_idle_minutes: int = 30):
+        """Remove waiting rooms with no recent activity (no players or creator idle)."""
+        to_remove = []
+        for game_id, state in self.games.items():
+            if state.phase != "waiting":
+                continue
+            # Remove if no players
+            if not state.players:
+                with self._get_lock(game_id):
+                    del self.games[game_id]
+                    if game_id in self._locks:
+                        del self._locks[game_id]
+                log.info(f"[GameManager] Removed abandoned empty room {game_id}")
+                to_remove.append(game_id)
+                continue
+            # Remove if creator has been idle for too long
+            idle = datetime.now() - state.timer_start
+            if idle > timedelta(minutes=max_idle_minutes):
+                with self._get_lock(game_id):
+                    del self.games[game_id]
+                    if game_id in self._locks:
+                        del self._locks[game_id]
+                log.info(f"[GameManager] Removed abandoned idle room {game_id} (idle={idle})")
+                to_remove.append(game_id)
+        return to_remove
 
     def distribute_role_card(self, game_id: str, player_id: str, layer: str):
         """分发角色卡指定层级给玩家。
@@ -356,163 +456,169 @@ class GameManager:
 
     def execute_private_events(self, game_id: str, phase: str):
         """执行当前阶段的所有 DM 私信触发点。返回 [(player_id, content), ...]。"""
-        if game_id not in self.games:
-            return []
-        state = self.games[game_id]
-        events = [e for e in state.script.private_events if e.phase == phase]
-        results = []
-        for event in events:
-            player_id = None
-            for pid, player in state.players.items():
-                if player.role and player.role.name == event.target_role_name:
-                    player_id = pid
-                    break
-            if player_id:
-                results.append((player_id, event.content))
-        return results
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return []
+            state = self.games[game_id]
+            events = [e for e in state.script.private_events if e.phase == phase]
+            results = []
+            for event in events:
+                player_id = None
+                for pid, player in state.players.items():
+                    if player.role and player.role.name == event.target_role_name:
+                        player_id = pid
+                        break
+                if player_id:
+                    results.append((player_id, event.content))
+            return results
 
     def cache_distribution(self, game_id: str, role_cards: dict, clues: dict, private_events: list):
         """Cache distributed data in GameState so it can be resent on WS (re)connect."""
-        if game_id not in self.games:
-            return
-        state = self.games[game_id]
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return
+            state = self.games[game_id]
 
-        # Cache role cards per player
-        for pid, card_data in role_cards.items():
-            if pid not in state.distributed_role_cards:
-                state.distributed_role_cards[pid] = []
-            # Determine layer from the data content
-            layer = "2" if "background" in card_data else "3"
-            state.distributed_role_cards[pid].append({
-                "type": "role_card",
-                "layer": layer,
-                "player_id": pid,
-                "data": card_data,
-            })
-
-        # Cache clues per player
-        for pid, clue_list in clues.items():
-            if pid not in state.distributed_clues:
-                state.distributed_clues[pid] = []
-            for clue_data in clue_list:
-                state.distributed_clues[pid].append({
-                    "type": "clue_unlock",
+            # Cache role cards per player
+            for pid, card_data in role_cards.items():
+                if pid not in state.distributed_role_cards:
+                    state.distributed_role_cards[pid] = []
+                # Determine layer from the data content
+                layer = "2" if "background" in card_data else "3"
+                state.distributed_role_cards[pid].append({
+                    "type": "role_card",
+                    "layer": layer,
                     "player_id": pid,
-                    "clue": clue_data,
+                    "data": card_data,
                 })
 
-        # Cache DM private messages
-        for pid, content in private_events:
-            if pid not in state.distributed_dm_private:
-                state.distributed_dm_private[pid] = []
-            state.distributed_dm_private[pid].append({
-                "type": "dm_private",
-                "from": "__dm__",
-                "to": pid,
-                "content": content,
-            })
+            # Cache clues per player
+            for pid, clue_list in clues.items():
+                if pid not in state.distributed_clues:
+                    state.distributed_clues[pid] = []
+                for clue_data in clue_list:
+                    state.distributed_clues[pid].append({
+                        "type": "clue_unlock",
+                        "player_id": pid,
+                        "clue": clue_data,
+                    })
+
+            # Cache DM private messages
+            for pid, content in private_events:
+                if pid not in state.distributed_dm_private:
+                    state.distributed_dm_private[pid] = []
+                state.distributed_dm_private[pid].append({
+                    "type": "dm_private",
+                    "from": "__dm__",
+                    "to": pid,
+                    "content": content,
+                })
 
     def cache_accusation(self, game_id: str, from_player_name: str, from_player_id: str, target: str, reasoning: str):
         """Cache an accusation for WS reconnect replay."""
-        if game_id not in self.games:
-            return
-        state = self.games[game_id]
-        state.distributed_accusations.append({
-            "type": "accusation",
-            "from": from_player_name,
-            "from_player_id": from_player_id,
-            "target": target,
-            "reasoning": reasoning,
-        })
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return
+            state = self.games[game_id]
+            state.distributed_accusations.append({
+                "type": "accusation",
+                "from": from_player_name,
+                "from_player_id": from_player_id,
+                "target": target,
+                "reasoning": reasoning,
+            })
 
     def cache_private_chat(self, game_id: str, from_player_id: str, to_player_id: str, content: str):
         """Cache a private chat message for WS reconnect replay."""
-        if game_id not in self.games:
-            return
-        state = self.games[game_id]
-        # Cache for sender
-        if from_player_id not in state.distributed_private_chat:
-            state.distributed_private_chat[from_player_id] = []
-        state.distributed_private_chat[from_player_id].append({
-            "type": "private_chat",
-            "from": from_player_id,
-            "content": content,
-            "timestamp": "",
-        })
-        # Cache for receiver
-        if to_player_id not in state.distributed_private_chat:
-            state.distributed_private_chat[to_player_id] = []
-        state.distributed_private_chat[to_player_id].append({
-            "type": "private_chat",
-            "from": from_player_id,
-            "content": content,
-            "timestamp": "",
-        })
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return
+            state = self.games[game_id]
+            # Cache for sender
+            if from_player_id not in state.distributed_private_chat:
+                state.distributed_private_chat[from_player_id] = []
+            state.distributed_private_chat[from_player_id].append({
+                "type": "private_chat",
+                "from": from_player_id,
+                "content": content,
+                "timestamp": "",
+            })
+            # Cache for receiver
+            if to_player_id not in state.distributed_private_chat:
+                state.distributed_private_chat[to_player_id] = []
+            state.distributed_private_chat[to_player_id].append({
+                "type": "private_chat",
+                "from": from_player_id,
+                "content": content,
+                "timestamp": "",
+            })
 
     def get_pending_distributions(self, game_id: str, player_id: str) -> list:
         """Get all cached distribution messages for a player (for WS connect/resend)."""
-        if game_id not in self.games:
-            return []
-        state = self.games[game_id]
-        messages = []
-        messages.extend(state.distributed_role_cards.get(player_id, []))
-        messages.extend(state.distributed_clues.get(player_id, []))
-        messages.extend(state.distributed_dm_private.get(player_id, []))
-        messages.extend(state.distributed_private_chat.get(player_id, []))
-        messages.extend(state.distributed_accusations)
-        return messages
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return []
+            state = self.games[game_id]
+            messages = []
+            messages.extend(state.distributed_role_cards.get(player_id, []))
+            messages.extend(state.distributed_clues.get(player_id, []))
+            messages.extend(state.distributed_dm_private.get(player_id, []))
+            messages.extend(state.distributed_private_chat.get(player_id, []))
+            messages.extend(state.distributed_accusations)
+            return messages
 
     def unlock_phase(self, game_id: str, new_phase: str, new_act: int):
         """阶段解锁：切换阶段并执行该阶段的所有自动分发。
         new_phase is the act phase: "act1", "act2", "act3", etc.
         Returns {role_cards: {pid: layer_data}, clues: {pid: [clue_data]}, private_events: [(pid, content)]}
         """
-        if game_id not in self.games:
-            return None
-        state = self.games[game_id]
-        # Phase stays "playing" — act1/act2 are acts within playing phase
-        state.phase = "playing"
-        state.act = new_act
+        with self._get_lock(game_id):
+            if game_id not in self.games:
+                return None
+            state = self.games[game_id]
+            # Phase stays "playing" — act1/act2 are acts within playing phase
+            state.phase = "playing"
+            state.act = new_act
 
-        role_cards = {}
-        clues = {}
-        private_events = []
+            role_cards = {}
+            clues = {}
+            private_events = []
 
-        act_key = f"act{new_act}"
-        layer_to_unlock = ACT_UNLOCK_MAP.get(act_key)
+            act_key = f"act{new_act}"
+            layer_to_unlock = ACT_UNLOCK_MAP.get(act_key)
 
-        if layer_to_unlock:
-            for pid, player in state.players.items():
-                card_data = self.distribute_role_card(game_id, pid, layer_to_unlock)
-                if card_data:
-                    role_cards[pid] = card_data
+            if layer_to_unlock:
+                for pid, player in state.players.items():
+                    card_data = self.distribute_role_card(game_id, pid, layer_to_unlock)
+                    if card_data:
+                        role_cards[pid] = card_data
 
-        for clue in state.script.clues:
-            if clue.unlock_phase == act_key:
-                # Determine targets: if empty, distribute to all players (public clue)
-                if clue.target_player_ids:
-                    for pid, player in state.players.items():
-                        if player.role and player.role.name in clue.target_player_ids:
+            for clue in state.script.clues:
+                if clue.unlock_phase == act_key:
+                    # Determine targets: if empty, distribute to all players (public clue)
+                    if clue.target_player_ids:
+                        for pid, player in state.players.items():
+                            if player.role and player.role.name in clue.target_player_ids:
+                                clue_data = self.distribute_clue(game_id, clue.id, pid)
+                                if clue_data:
+                                    clues.setdefault(pid, []).append(clue_data)
+                    else:
+                        # Public clue — distribute to all players
+                        for pid, player in state.players.items():
                             clue_data = self.distribute_clue(game_id, clue.id, pid)
                             if clue_data:
                                 clues.setdefault(pid, []).append(clue_data)
-                else:
-                    # Public clue — distribute to all players
-                    for pid, player in state.players.items():
-                        clue_data = self.distribute_clue(game_id, clue.id, pid)
-                        if clue_data:
-                            clues.setdefault(pid, []).append(clue_data)
 
-        private_events = self.execute_private_events(game_id, act_key)
+            private_events = self.execute_private_events(game_id, act_key)
 
-        # Cache the distributions for WS reconnect
-        self.cache_distribution(game_id, role_cards, clues, private_events)
+            # Cache the distributions for WS reconnect
+            self.cache_distribution(game_id, role_cards, clues, private_events)
 
-        return {
-            "role_cards": role_cards,
-            "clues": clues,
-            "private_events": private_events,
-        }
+            return {
+                "role_cards": role_cards,
+                "clues": clues,
+                "private_events": private_events,
+            }
 
 
 def _get_manager() -> GameManager:
