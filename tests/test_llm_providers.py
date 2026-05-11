@@ -134,3 +134,54 @@ def test_openai_retry_on_5xx(mock_post):
     result = provider.chat([{"role": "user", "content": "Hi"}])
     assert result == "OK"
     assert mock_post.call_count == 2
+
+
+# --- Anthropic Provider tests ---
+
+from server.llm.anthropic_provider import AnthropicProvider
+
+
+@patch("server.llm.anthropic_provider.requests.post")
+def test_anthropic_chat(mock_post):
+    mock_post.return_value = _mock_response(200, {
+        "content": [{"type": "text", "text": "Claude says hi"}]
+    })
+    provider = AnthropicProvider("test-claude", "https://api.anthropic.com", "claude-sonnet-4-6", "sk-ant-test")
+    result = provider.chat([{"role": "user", "content": "Hi"}])
+    assert result == "Claude says hi"
+    call_url = mock_post.call_args[0][0]
+    assert "/v1/messages" in call_url
+
+
+@patch("server.llm.anthropic_provider.requests.post")
+def test_anthropic_chat_stream(mock_post):
+    lines = [
+        b'event: content_block_delta',
+        b'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}',
+        b'',
+        b'event: content_block_delta',
+        b'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" world"}}',
+        b'',
+        b'event: message_stop',
+        b'data: {"type":"message_stop"}',
+    ]
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.iter_lines.return_value = lines
+    mock_post.return_value = resp
+
+    provider = AnthropicProvider("test", "https://api.anthropic.com", "claude-sonnet-4-6", "sk-test")
+    chunks = list(provider.chat_stream([{"role": "user", "content": "Hi"}]))
+    assert chunks == ["Hello", " world"]
+
+
+def test_anthropic_provider_type():
+    provider = AnthropicProvider("test", "https://api.anthropic.com", "claude-sonnet-4-6", "sk-test")
+    assert provider.provider_type == "anthropic"
+
+
+def test_anthropic_get_config():
+    provider = AnthropicProvider("my-claude", "https://api.anthropic.com", "claude-sonnet-4-6", "sk-ant-12345678")
+    config = provider.get_config()
+    assert config["type"] == "anthropic"
+    assert config["api_key_set"] is True
