@@ -103,7 +103,7 @@ def test_force_trial_by_non_admin_fails():
 def test_end_game_by_admin(monkeypatch):
     # Mock LLM to avoid real API calls in integration tests
     monkeypatch.setattr(
-        "server.host_dm.host.generate_event",
+        "server.game_engine.host.GameHost.generate_event",
         lambda state: {"public_event": "真相揭晓", "private_clues": [], "dm_instruction": ""},
     )
 

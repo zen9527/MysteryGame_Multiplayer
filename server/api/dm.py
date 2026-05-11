@@ -14,8 +14,8 @@ def _get_manager():
     return container.resolve("game_manager")
 
 
-def _get_host_dm():
-    return container.resolve("host_dm")
+def _get_game_host():
+    return container.resolve("game_host")
 
 
 def _get_hub():
@@ -96,7 +96,7 @@ def _chat_response_generator(game_id: str, player_id: str, player_message: str, 
         yield f"data: {{\"type\": \"start\"}}\n\n"
 
         full_reply = ""
-        for chunk in _get_host_dm().respond_to_chat_stream(state, player_id, player_message):
+        for chunk in _get_game_host().respond_to_chat_stream(state, player_id, player_message):
             full_reply += chunk
             yield f"data: {{\"type\": \"chunk\", \"content\": {json.dumps(chunk, ensure_ascii=False)}}}\n\n"
 

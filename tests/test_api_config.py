@@ -6,14 +6,6 @@ from server.di import container
 client = TestClient(app)
 
 
-def _get_host_dm():
-    return container.resolve("host_dm")
-
-
-def _get_manager():
-    return container.resolve("game_manager")
-
-
 def test_health_check():
     resp = client.get("/api/health")
     assert resp.status_code == 200
@@ -26,46 +18,77 @@ def test_get_llm_config():
     resp = client.get("/api/llm-config")
     assert resp.status_code == 200
     data = resp.json()
-    assert "endpoint" in data
+    assert "name" in data
+    assert "type" in data
     assert "model" in data
-    assert "api_key_set" in data
 
 
-def test_update_llm_config():
-    resp = client.post("/api/llm-config", json={
-        "endpoint": "http://localhost:11434/v1",
-        "model": "test-model",
+def test_list_providers():
+    resp = client.get("/api/llm/providers")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "providers" in data
+    assert len(data["providers"]) >= 1
+    # Default provider should be active
+    default = next((p for p in data["providers"] if p["name"] == "default"), None)
+    assert default is not None
+    assert default["is_active"] is True
+
+
+def test_add_provider():
+    resp = client.post("/api/llm/providers", json={
+        "name": "test-provider",
+        "type": "openai",
+        "endpoint": "http://localhost:12340",
+        "model": "gpt-4",
+        "api_key": "sk-test-key",
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "updated"
-    assert data["model"] == "test-model"
+    assert data["status"] == "added"
+    assert data["name"] == "test-provider"
+
+    # Verify it appears in list
+    resp = client.get("/api/llm/providers")
+    providers = resp.json()["providers"]
+    assert any(p["name"] == "test-provider" for p in providers)
 
 
-def test_update_llm_config_partial():
-    host = _get_host_dm()
-    original_endpoint = host.llm.endpoint
-    resp = client.post("/api/llm-config", json={"model": "partial-model"})
-    assert resp.status_code == 200
-    assert resp.json()["model"] == "partial-model"
-    assert resp.json()["endpoint"] == original_endpoint
-
-
-def test_update_llm_config_api_key_masked():
-    resp = client.post("/api/llm-config", json={"api_key": "secret-key-12345678"})
+def test_set_active_provider():
+    resp = client.post("/api/llm/providers/active", json={"name": "default"})
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("api_key_set") is True
-    assert "api_key_masked" in data
-    assert "..." in data["api_key_masked"]
-    assert "secret-key-12345678" not in data.get("api_key_masked", "")
+    assert data["status"] == "active"
 
 
-def test_llm_models_endpoint():
-    resp = client.get("/api/llm-models")
+def test_remove_provider():
+    # First add a provider to remove
+    client.post("/api/llm/providers", json={
+        "name": "to-remove",
+        "type": "openai",
+        "endpoint": "http://localhost:12340",
+        "model": "gpt-4",
+        "api_key": "sk-test",
+    })
+    resp = client.delete("/api/llm/providers/to-remove")
     assert resp.status_code == 200
     data = resp.json()
-    assert "models" in data
+    assert data["status"] == "removed"
+
+    # Verify removed
+    resp = client.get("/api/llm/providers")
+    providers = resp.json()["providers"]
+    assert not any(p["name"] == "to-remove" for p in providers)
+
+
+def test_remove_nonexistent():
+    resp = client.delete("/api/llm/providers/nonexistent")
+    assert resp.status_code == 404
+
+
+def test_set_active_nonexistent():
+    resp = client.post("/api/llm/providers/active", json={"name": "nonexistent"})
+    assert resp.status_code == 404
 
 
 def test_health_reflects_games_count():

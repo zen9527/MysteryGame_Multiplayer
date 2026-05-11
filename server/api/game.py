@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 import json
 import asyncio
-from server.models import Script, Role, Clue, PlotOutline
 from server.di import container
 from server.middleware import require_admin
 from server.utils.validation import AdminActionRequest
@@ -15,12 +14,16 @@ def _get_manager():
     return container.resolve("game_manager")
 
 
-def _get_host_dm():
-    return container.resolve("host_dm")
+def _get_game_host():
+    return container.resolve("game_host")
 
 
 def _get_hub():
     return container.resolve("websocket_hub")
+
+
+def _get_scheduler():
+    return container.resolve("game_scheduler")
 
 
 @router.post("/rooms/{game_id}/start")
@@ -89,6 +92,9 @@ async def start_game(game_id: str):
         for pid, content in unlock_result["private_events"]:
             await _get_hub().send_dm_private(game_id, pid, content)
 
+    # Start scheduler for autonomous DM
+    _get_scheduler().start(game_id)
+
     asyncio.create_task(_auto_generate_opening(game_id))
 
     return {"game_id": game_id, "phase": state.phase}
@@ -100,7 +106,7 @@ async def _auto_generate_opening(game_id: str):
         return
     try:
         event = await asyncio.wait_for(
-            asyncio.to_thread(_get_host_dm().generate_event, state),
+            asyncio.to_thread(_get_game_host().generate_opening, state),
             timeout=60,
         )
         result = _get_manager().push_structured_event(game_id, event)
@@ -126,7 +132,7 @@ def _push_event_generator(game_id: str, state):
     try:
         yield f"data: {{\"type\": \"start\"}}\n\n"
 
-        event = _get_host_dm().generate_event(state)
+        event = _get_game_host().generate_event(state)
         state.current_round += 1
         result = _get_manager().push_structured_event(game_id, event)
 
@@ -232,12 +238,8 @@ def _end_game_generator(game_id: str, state):
     try:
         yield f"data: {{\"type\": \"start\"}}\n\n"
 
-        reveal_result = _get_host_dm().generate_event(state)
-        reveal_text = reveal_result.get("public_event", str(reveal_result)) if isinstance(reveal_result, dict) else str(reveal_result)
+        reveal_text = _get_game_host().generate_reveal(state)
         _get_manager().push_event(game_id, f"📢 真相揭晓：{reveal_text}")
-
-        if isinstance(reveal_result, dict) and reveal_result.get("private_clues"):
-            _get_manager().push_structured_event(game_id, reveal_result)
 
         done_payload = json.dumps({
             "type": "done",
@@ -248,6 +250,7 @@ def _end_game_generator(game_id: str, state):
     except Exception as e:
         yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
     finally:
+        _get_scheduler().stop(game_id)
         _get_manager().end_game(game_id)
 
 
@@ -267,3 +270,31 @@ async def end_game(game_id: str, req: AdminActionRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/rooms/{game_id}/dm/toggle-auto")
+async def toggle_auto(game_id: str, req: AdminActionRequest):
+    state = _get_manager().get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+    state.dm_auto = not state.dm_auto
+    return {"auto": state.dm_auto}
+
+
+@router.get("/rooms/{game_id}/dm/status")
+async def dm_status(game_id: str):
+    from datetime import datetime
+    state = _get_manager().get_state(game_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Room not found")
+    idle_seconds = 0
+    if state.last_player_activity:
+        idle_seconds = (datetime.now() - state.last_player_activity).total_seconds()
+    return {
+        "auto": state.dm_auto,
+        "phase": state.phase,
+        "act": state.act,
+        "idle_seconds": round(idle_seconds),
+        "interventions": len(state.dm_intervention_history),
+    }

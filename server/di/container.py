@@ -27,11 +27,13 @@ class Container:
 def register_services(container):
     from server.game_manager import GameManager
     from server.websocket_hub import WebSocketHub
-    from server.host_dm import HostDM
     from server.script_repository import ScriptRepository
     from server.script_service import ScriptService
+    from server.script_engine.generator import ScriptGenerator
     from server.llm.registry import LLMRegistry
     from server.llm.openai_provider import OpenAIProvider
+    from server.game_engine.host import GameHost
+    from server.game_engine.scheduler import GameScheduler
     from server.config import config as app_config
 
     def _create_registry():
@@ -48,9 +50,26 @@ def register_services(container):
     container.register("llm_registry", _create_registry, singleton=True)
     container.register("game_manager", GameManager, singleton=True)
     container.register("websocket_hub", WebSocketHub, singleton=True)
-    container.register("host_dm", HostDM, singleton=True)
     container.register("script_repository", ScriptRepository, singleton=True)
     container.register("script_service", lambda: ScriptService(container.resolve("script_repository")), singleton=True)
+    container.register("script_generator", lambda: ScriptGenerator(container.resolve("llm_registry")), singleton=True)
+
+    def _create_host():
+        return GameHost(
+            container.resolve("llm_registry"),
+            container.resolve("game_manager"),
+            container.resolve("websocket_hub"),
+        )
+
+    def _create_scheduler():
+        return GameScheduler(
+            container.resolve("game_host"),
+            container.resolve("game_manager"),
+            container.resolve("websocket_hub"),
+        )
+
+    container.register("game_host", _create_host, singleton=True)
+    container.register("game_scheduler", _create_scheduler, singleton=True)
 
 
 container = Container()

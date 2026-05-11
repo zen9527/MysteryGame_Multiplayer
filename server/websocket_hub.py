@@ -3,7 +3,7 @@ from typing import Dict
 import asyncio
 import json
 from server.game_manager import manager
-from server.host_dm import host as host_dm
+from server.di import container
 from server.models import Message
 from server.utils.validation import sanitize_string, MAX_CHAT_LENGTH
 
@@ -81,6 +81,8 @@ class WebSocketHub:
             state = manager.get_state(room_id)
             display_name = _resolve_display_name(state, player_id)
             manager.add_chat_message(room_id, player_id, content, False, None)
+            from datetime import datetime as _dt
+            state.last_player_activity = _dt.now()
             await self.broadcast(room_id, {
                 "type": "chat",
                 "from": display_name,
@@ -145,7 +147,8 @@ class WebSocketHub:
             if state and state.phase in ("playing",):
                 try:
                     state.current_round += 1
-                    event = await asyncio.to_thread(host_dm.generate_event, state)
+                    game_host = container.resolve("game_host")
+                    event = await asyncio.to_thread(game_host.generate_event, state)
                     result = manager.push_structured_event(room_id, event)
                     if result:
                         if result["public_event"]:

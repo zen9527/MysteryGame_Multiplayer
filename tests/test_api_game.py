@@ -163,7 +163,7 @@ def test_force_trial_not_found():
 
 def test_end_game_admin(monkeypatch):
     monkeypatch.setattr(
-        "server.host_dm.host.generate_event",
+        "server.game_engine.host.GameHost.generate_event",
         lambda state: {"public_event": "真相揭晓", "private_clues": [], "dm_instruction": ""},
     )
     game_id = _setup_playable_game()

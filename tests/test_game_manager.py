@@ -1,7 +1,7 @@
 import pytest
 from server.models import Script, Role, Clue, PlotOutline
 from server.game_manager import GameManager
-from server.host_dm import HostDM
+from server.game_engine.host import GameHost
 
 
 @pytest.fixture
@@ -356,12 +356,12 @@ def test_push_structured_event_empty_public(game_manager, sample_script):
     assert len(state.dm_log) == 1  # DM instruction logged
 
 
-# --- HostDM parse_event_response tests ---
+# --- GameHost parse_event_response tests ---
 
 
 def test_parse_event_response_valid_json():
     raw = '{"public_event": "🌙 月光洒在书房地板上...", "private_clues": [{"role": "林默", "content": "你的袖口有污渍"}], "dm_instruction": "引导讨论"}'
-    result = HostDM.parse_event_response(raw)
+    result = GameHost.parse_event_response(raw)
     assert result["public_event"] == "🌙 月光洒在书房地板上..."
     assert len(result["private_clues"]) == 1
     assert result["private_clues"][0]["role"] == "林默"
@@ -370,13 +370,13 @@ def test_parse_event_response_valid_json():
 
 def test_parse_event_response_markdown_block():
     raw = '```json\n{"public_event": "测试事件", "private_clues": [], "dm_instruction": ""}\n```'
-    result = HostDM.parse_event_response(raw)
+    result = GameHost.parse_event_response(raw)
     assert result["public_event"] == "测试事件"
 
 
 def test_parse_event_response_invalid_json_fallback():
     raw = "这不是JSON，只是普通文本"
-    result = HostDM.parse_event_response(raw)
+    result = GameHost.parse_event_response(raw)
     assert result["public_event"] == "这不是JSON，只是普通文本"
     assert result["private_clues"] == []
     assert result["dm_instruction"] == ""
