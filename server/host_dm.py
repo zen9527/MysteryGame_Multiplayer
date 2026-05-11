@@ -1,8 +1,7 @@
 import json
 import logging
-from typing import Generator, Tuple
+from typing import Generator
 
-from server.llm_client import LLMClient
 from server.models import GameState
 
 log = logging.getLogger(__name__)
@@ -10,8 +9,39 @@ log = logging.getLogger(__name__)
 
 class HostDM:
     def __init__(self):
-        self.llm = LLMClient()
-        self.system_prompt = """你是一名专业的剧本杀主持人（DM）。你的职责：
+        self._registry = None
+
+    @property
+    def registry(self):
+        if self._registry is None:
+            from server.di import container
+            self._registry = container.resolve("llm_registry")
+        return self._registry
+
+    @property
+    def llm(self):
+        """Backward compat alias."""
+        return self.registry.get_active()
+
+    @staticmethod
+    def parse_event_response(raw: str) -> dict:
+        text = raw.strip()
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as e:
+            log.warning(f"[DM] JSON parse failed, using raw text as public_event: {e}")
+            return {"public_event": raw, "private_clues": [], "dm_instruction": ""}
+        return {
+            "public_event": data.get("public_event", ""),
+            "private_clues": data.get("private_clues", []),
+            "dm_instruction": data.get("dm_instruction", ""),
+        }
+
+    SYSTEM_EVENT_PROMPT = """你是一名专业的剧本杀主持人（DM）。你的职责：
 1. 动态发布事件 — 每轮给玩家一个情境或发现
 2. 投放线索 — 根据游戏进度和玩家行为决定何时放出什么线索
 3. 维持剧情一致性 — 所有事件和线索必须符合剧本设定
@@ -31,64 +61,20 @@ class HostDM:
 
 你必须返回一个 JSON 对象，包含以下字段：
 {
-  "public_event": "面向所有玩家公开的叙事/事件/线索。可以包含环境描写、公共线索、动态事件等。使用emoji和markdown增强可读性。如果没有公共内容，填空字符串。",
+  "public_event": "面向所有玩家公开的叙事/事件/线索。使用emoji和markdown增强可读性。如果没有公共内容，填空字符串。",
   "private_clues": [
     {"role": "角色名", "content": "该角色专属的线索内容"},
     ...
   ],
-  "dm_instruction": "仅DM可见的行动指引。告诉玩家本轮该做什么（如：自由讨论、申请搜查、准备下一轮等）。不要暴露给玩家。"
+  "dm_instruction": "仅DM可见的行动指引。不要暴露给玩家。"
 }
 
-注意事项：
-- private_clues 的 role 字段必须是当前在场玩家的**角色名**（如"林默"、"苏婉"）
+注意：
+- private_clues 的 role 字段必须是当前在场玩家的**角色名**
 - 不要给所有玩家相同的专属线索——专属线索应该有差异性
-- dm_instruction 是给你的内部操作指引，玩家看不到
 - 只返回JSON，不要添加任何解释文字"""
 
-    @staticmethod
-    def parse_event_response(raw: str) -> dict:
-        """Parse LLM response into structured event dict.
-
-        Returns:
-            {
-                "public_event": str,
-                "private_clues": [{"role": str, "content": str}, ...],
-                "dm_instruction": str,
-            }
-        """
-        text = raw.strip()
-        # Try to extract JSON from markdown code block
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0].strip()
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0].strip()
-
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError as e:
-            log.warning(f"[DM] JSON parse failed, using raw text as public_event: {e}")
-            return {
-                "public_event": raw,
-                "private_clues": [],
-                "dm_instruction": "",
-            }
-
-        return {
-            "public_event": data.get("public_event", ""),
-            "private_clues": data.get("private_clues", []),
-            "dm_instruction": data.get("dm_instruction", ""),
-        }
-
     def generate_event(self, game_state: GameState) -> dict:
-        """生成当前轮次的事件，返回结构化数据。
-
-        Returns:
-            {
-                "public_event": str,        # 公屏消息
-                "private_clues": list[dict], # [{role, content}, ...]
-                "dm_instruction": str,       # DM内部指引
-            }
-        """
         history = game_state.host_message_history[-10:]
         player_info = []
         role_names = []
@@ -111,37 +97,37 @@ class HostDM:
 最近聊天：
 {''.join(chat_summary) if chat_summary else '暂无聊天记录'}
 
-请根据以上信息生成下一个游戏事件。如果是第一幕，发布开场背景介绍；
-如果是第二幕，根据讨论情况投放线索或推进剧情；
-如果是第三幕，引导审判和真相揭晓。
+请根据以上信息生成下一个游戏事件。严格按JSON格式返回，包含 public_event、private_clues、dm_instruction 三个字段。"""
 
-严格按JSON格式返回，包含 public_event、private_clues、dm_instruction 三个字段。"""
+        messages = [{"role": "system", "content": self.SYSTEM_EVENT_PROMPT}]
+        for msg in history[:-1]:
+            messages.append({"role": "assistant", "content": msg})
+        if history:
+            messages.append({"role": "user", "content": user_input})
+        else:
+            messages.append({"role": "user", "content": user_input})
 
-        raw = self.llm.host_event(self.system_prompt, history + [user_input])
+        raw = self.registry.get_active().chat(messages, temperature=0.8, timeout=300)
         return self.parse_event_response(raw)
 
     def generate_script(self, system_prompt: str, user_prompt: str) -> str:
-        """生成剧本"""
-        return self.llm.generate_script(system_prompt, user_prompt)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        return self.registry.get_active().chat(messages, temperature=0.7, timeout=300)
 
     DM_CHAT_SYSTEM_PROMPT = """你是一名专业的剧本杀主持人（DM）。玩家正在通过私信与你对话。
 
 你的职责：
 1. 根据当前游戏阶段和剧本设定，给玩家合适的回应
-2. 如果玩家询问线索，根据阶段决定是否透露（第一幕给模糊提示，第二幕给具体线索）
-3. 如果玩家询问规则，简洁说明
-4. 如果玩家表达推理，给予鼓励或引导
-5. 保持DM身份，不要直接透露凶手或关键剧情
+2. 如果玩家询问线索，根据阶段决定是否透露
+3. 保持DM身份，不要直接透露凶手或关键剧情
+4. 回复使用中文，语气亲切但保持神秘感
+5. 回复长度控制在 50-200 字
+6. 只回复纯文本，不要JSON格式"""
 
-规则：
-- 回复使用中文，语气亲切但保持神秘感
-- 不要一次性透露太多信息
-- 根据玩家角色和当前幕次给出差异化回应
-- 回复长度控制在 50-200 字
-- 只回复纯文本，不要JSON格式"""
-
-    def _build_chat_prompt(self, game_state: GameState, player_id: str, player_message: str) -> Tuple[str, str]:
-        """Build system and user prompts for DM chat response. Returns (system_prompt, user_prompt)."""
+    def _build_chat_messages(self, game_state: GameState, player_id: str, player_message: str) -> list[dict]:
         player = game_state.players.get(player_id)
         role_name = player.role.name if player and player.role else "未分配"
 
@@ -164,22 +150,21 @@ class HostDM:
 
 请给玩家一个符合DM身份的回复。"""
 
-        return self.DM_CHAT_SYSTEM_PROMPT, user_input
+        return [
+            {"role": "system", "content": self.DM_CHAT_SYSTEM_PROMPT},
+            {"role": "user", "content": user_input},
+        ]
 
     def respond_to_chat(self, game_state: GameState, player_id: str, player_message: str) -> str:
-        """Generate a DM response to a player's private message. Returns plain text."""
-        system_prompt, user_input = self._build_chat_prompt(game_state, player_id, player_message)
-
+        messages = self._build_chat_messages(game_state, player_id, player_message)
         full_reply = ""
-        for chunk in self.llm.chat_stream(system_prompt, user_input):
+        for chunk in self.registry.get_active().chat_stream(messages, temperature=0.8):
             full_reply += chunk
         return full_reply
 
     def respond_to_chat_stream(self, game_state: GameState, player_id: str, player_message: str) -> Generator[str, None, None]:
-        """Stream a DM response to a player's private message. Yields content chunks."""
-        system_prompt, user_input = self._build_chat_prompt(game_state, player_id, player_message)
-
-        yield from self.llm.chat_stream(system_prompt, user_input)
+        messages = self._build_chat_messages(game_state, player_id, player_message)
+        yield from self.registry.get_active().chat_stream(messages, temperature=0.8)
 
 
 host = HostDM()
