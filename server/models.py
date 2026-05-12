@@ -1,3 +1,16 @@
+"""
+DEPRECATION NOTICE:
+
+This file contains legacy Pydantic models. New WebSocket message models
+should use server/models/ws.py which mirrors the Zod schemas in
+shared/schemas/ws.ts for type consistency across the stack.
+
+Migration plan:
+- Phase 1: Add new models to ws.py (DONE)
+- Phase 2: Gradually migrate API routes to use ws.py models
+- Phase 3: Remove this file after all routes migrated
+"""
+
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import uuid
