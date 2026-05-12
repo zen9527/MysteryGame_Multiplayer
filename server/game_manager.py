@@ -81,13 +81,16 @@ class GameManager:
             if game_id not in self.games:
                 return None
             state = self.games[game_id]
+            # Always enforce room capacity limit
+            if len(state.players) >= MAX_PLAYERS_PER_ROOM:
+                return None
             # If script not yet generated (placeholder has no roles), allow joining without role
             if not state.script.roles:
                 player = Player(id=player_id, name=player_name, role_id="", role=None)
                 state.players[player_id] = player
                 return player
             # Count all players to assign roles correctly
-            if len(state.players) >= min(len(state.script.roles), MAX_PLAYERS_PER_ROOM):
+            if len(state.players) >= len(state.script.roles):
                 return None
             role = state.script.roles[len(state.players)]
             player = Player(
@@ -335,12 +338,26 @@ class GameManager:
             if total_players == 0:
                 return False
             for count in vote_counts.values():
-                if count >= total_players * CONSENSUS_THRESHOLD:
+                if count * 2 > total_players:  # Strict majority (>50%)
                     return True
             return False
 
     def get_state(self, game_id: str) -> Optional[GameState]:
         return self.games.get(game_id)
+
+    def update_activity(self, game_id: str):
+        """Thread-safe update of last_player_activity timestamp."""
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                self.games[game_id].last_player_activity = datetime.now()
+
+    def increment_round(self, game_id: str):
+        """Thread-safe increment of current_round."""
+        with self._get_lock(game_id):
+            if game_id in self.games:
+                self.games[game_id].current_round += 1
+                return self.games[game_id].current_round
+        return None
 
     def cleanup_game(self, game_id: str):
         """Truncate message lists and clear caches for ended games to prevent memory growth."""

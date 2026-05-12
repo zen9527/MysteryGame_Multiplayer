@@ -12,6 +12,7 @@ const routes = [
   { path: '/lobby/:gameId', component: WaitingLobby },
   { path: '/game/:gameId', component: GamePage },
   { path: '/create', component: RoomCreate },
+  { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 
 const router = createRouter({

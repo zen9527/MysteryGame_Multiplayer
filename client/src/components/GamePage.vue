@@ -221,6 +221,8 @@ const adminLoading = computed(() =>
 // WebSocket
 let ws: WebSocket | null = null;
 let reconnectAttempts = 0;
+let fetchInterval: ReturnType<typeof setInterval> | null = null;
+let clueTimeout: ReturnType<typeof setTimeout> | null = null;
 const messageContainer = ref<HTMLElement | null>(null);
 
 // Convert players Map to array with keys for v-for
@@ -281,6 +283,12 @@ async function fetchState() {
 
 // WebSocket connection with native API and exponential backoff
 function connectWebSocket() {
+  // Close existing connection before creating a new one
+  if (ws) {
+    ws.onclose = null;
+    ws.close();
+  }
+
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = `${protocol}//${window.location.host}/ws/${gameId}/${playerId}`;
   ws = new WebSocket(url);
@@ -358,7 +366,8 @@ async function requestClue() {
   sendWSMessage('request_advance');
   // The server will generate an event and broadcast it via WS.
   // Auto-reset loading after 15 seconds (LLM may take a while but will broadcast when done).
-    setTimeout(() => { requestingClue.value = false; }, REQUEST_CLUE_TIMEOUT);
+  if (clueTimeout) clearTimeout(clueTimeout);
+  clueTimeout = setTimeout(() => { requestingClue.value = false; }, REQUEST_CLUE_TIMEOUT);
 }
 
   async function submitAccusation() {
@@ -599,12 +608,16 @@ async function handlePushEvent() {
 onMounted(() => {
   fetchState();
   connectWebSocket();
-  const interval = setInterval(fetchState, FETCH_STATE_INTERVAL);
-  return () => clearInterval(interval);
+  fetchInterval = setInterval(fetchState, FETCH_STATE_INTERVAL);
 });
 
 onUnmounted(() => {
-  if (ws) ws.close();
+  if (fetchInterval) clearInterval(fetchInterval);
+  if (clueTimeout) clearTimeout(clueTimeout);
+  if (ws) {
+    ws.onclose = null;
+    ws.close();
+  }
 });
 </script>
 

@@ -110,4 +110,4 @@ async def get_llm_config():
 
 @router.get("/health")
 async def health_check():
-    return {"status": "ok", "games_count": len(_get_manager().games)}
+    return {"status": "ok"}

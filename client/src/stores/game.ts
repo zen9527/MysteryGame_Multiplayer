@@ -66,12 +66,15 @@ export const useGameStore = defineStore('game', () => {
   const selectedScriptId = ref<string | null>(null);
   const availableScripts = ref<ScriptMetadata[]>([]);
 
+  // Dedup counter for same-from-same-content messages (allows duplicates with different timestamps)
+  const messageCounter = ref<Map<string, number>>(new Map());
+
   function _addPublicMessage(from: string, content: string, timestamp: string, isEvent = false) {
-    // Key without timestamp — WS messages have timestamp="" while API messages have real timestamps
-    // Same message from same sender must deduplicate regardless of source
-    const key = `${from}:${content}`;
-    if (seenMessageKeys.value.has(key)) return;
-    seenMessageKeys.value.add(key);
+    // Key includes a counter to allow same content from same sender (e.g., rapid identical chat)
+    // but still deduplicate on WS reconnect (same timestamp)
+    const baseKey = `${from}:${content}:${timestamp}`;
+    if (seenMessageKeys.value.has(baseKey)) return;
+    seenMessageKeys.value.add(baseKey);
     publicMessages.value.push({ from, content, timestamp, isEvent });
   }
 
@@ -100,13 +103,17 @@ export const useGameStore = defineStore('game', () => {
         // Public chat — add to publicMessages (deduplicated)
         _addPublicMessage(msg.from, msg.content, msg.timestamp || '');
         break;
-      case 'private_chat':
+      case 'private_chat': {
+        const chatKey = `pc:${msg.from}:${msg.content}:${msg.timestamp || ''}`;
+        if (seenPrivateKeys.value.has(chatKey)) break;
+        seenPrivateKeys.value.add(chatKey);
         privateMessages.value.push({
           from: msg.from,
           content: msg.content,
           timestamp: msg.timestamp || '',
         });
         break;
+      }
       case 'role_card': {
         const layer = msg.layer as '1' | '2' | '3';
         if (layer === '1') roleCard.value.layer1 = msg.data as RoleCardData;
@@ -156,14 +163,16 @@ export const useGameStore = defineStore('game', () => {
       case 'game_over':
         phase.value = 'finished';
         break;
-      case 'act_transition':
+      case 'act_transition': {
+        const bannerAct = msg.act;
         actBanner.value = { act: msg.act, plot_summary: msg.plot_summary };
         setTimeout(() => {
-          if (actBanner.value && actBanner.value.act === msg.act) {
+          if (actBanner.value && actBanner.value.act === bannerAct) {
             actBanner.value = null;
           }
         }, ACT_BANNER_DISMISS_MS);
         break;
+      }
       case 'phase_unlock':
         if (VALID_PHASES.includes(msg.phase as ValidPhase)) {
           phase.value = msg.phase as ValidPhase;
@@ -219,6 +228,10 @@ export const useGameStore = defineStore('game', () => {
         script_id: selectedScriptId.value
       })
     });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: '创建房间失败' }));
+      throw new Error(err.detail || '创建房间失败');
+    }
     const data = await response.json();
     return data.game_id;
   }

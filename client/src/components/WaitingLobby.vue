@@ -160,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import ScriptEditor from './ScriptEditor.vue';
 
@@ -223,6 +223,7 @@ const starting = ref(false);
 
 // Room ID input ref
 const roomInput = ref<HTMLInputElement | null>(null);
+let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 function selectRoomId() {
   if (roomInput.value) {
@@ -482,8 +483,11 @@ async function startGame() {
 onMounted(async () => {
   await Promise.all([loadGenres(), loadLLMConfig()]);
   fetchState();
-  const interval = setInterval(fetchState, 3000);
-  return () => clearInterval(interval);
+  pollInterval = setInterval(fetchState, 3000);
+});
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval);
 });
 </script>
 

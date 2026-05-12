@@ -13,7 +13,8 @@ Create a new game room. The creator becomes the admin player.
 ```json
 {
   "creator_id": "string",
-  "name": "string"  // Admin display name, default "管理员"
+  "name": "string",
+  "script_id": "string | null"
 }
 ```
 
@@ -74,11 +75,12 @@ Get full room state including players, script, clues, votes, and recent public m
   "votes": [...],
   "public_messages": [
     {
-      "from_player_id": "string",
-      "from_player_name": "角色名(玩家名)",
+      "message_id": "uuid",
       "content": "消息内容",
-      "type": "public",
-      "timestamp": "2024-01-01T00:00:00"
+      "player_id": "string",
+      "role_name": "角色名",
+      "timestamp": "2024-01-01T00:00:00",
+      "from_player_name": "角色名(玩家名)"
     }
   ]
 }
@@ -87,7 +89,12 @@ Get full room state including players, script, clues, votes, and recent public m
 ---
 
 ### `DELETE /rooms/{game_id}`
-Delete a room.
+Delete a room (admin only).
+
+**Request:**
+```json
+{ "player_id": "admin_player_id" }
+```
 
 **Response:**
 ```json
@@ -97,7 +104,7 @@ Delete a room.
 ---
 
 ### `POST /rooms/{game_id}/players`
-Add a player to the room.
+Add a player to the room. Enforces MAX_PLAYERS_PER_ROOM limit.
 
 **Request:**
 ```json
@@ -228,6 +235,62 @@ Manually set a script (admin edited content).
 
 ---
 
+## Scripts Repository API (`server/api/scripts.py`)
+
+All scripts repository endpoints require `admin_key` query parameter (configured via `SCRIPT_ADMIN_KEY` env var).
+
+### `GET /scripts`
+List stored scripts. Optional query params: `genre`, `difficulty`, `min_players`.
+
+**Response:**
+```json
+{ "scripts": [...] }
+```
+
+---
+
+### `POST /scripts`
+Upload a new script.
+
+**Request:** `ScriptUploadRequest` (title, genre, difficulty, roles, clues, etc.)
+
+**Response:**
+```json
+{ "script_id": "uuid" }
+```
+
+---
+
+### `GET /scripts/{script_id}`
+Get script detail.
+
+---
+
+### `DELETE /scripts/{script_id}`
+Delete a script (admin key required).
+
+---
+
+### `GET /scripts/export`
+Export all scripts (admin key required).
+
+---
+
+### `POST /scripts/import`
+Import scripts in bulk (admin key required).
+
+**Request:**
+```json
+{ "scripts": [...] }
+```
+
+**Response:**
+```json
+{ "imported": 3 }
+```
+
+---
+
 ## Game API (`server/api/game.py`)
 
 ### `POST /rooms/{game_id}/start`
@@ -239,9 +302,10 @@ Start the game. Requires ≥2 players and a generated script.
 ```
 
 Side effects:
-- Distributes layer 1 role cards via WS
+- Distributes layer 1 role cards via WS (and caches in `distributed_role_cards`)
 - Unlocks act 1 (layer 2 role cards, clues, private events)
 - Triggers DM auto-opening background task
+- Starts GameScheduler for auto-DM mode
 
 ---
 
@@ -277,7 +341,7 @@ Advance to next act (admin only). Max act 3.
 
 Side effects:
 - Broadcasts `phase_unlock` and `act_transition` via WS
-- Distributes new role cards (layer 3 for act 2), clues, and private events
+- Distributes new role cards, clues, and private events
 
 ---
 
@@ -313,10 +377,41 @@ data: {"type": "error", "message": "..."}
 
 ---
 
+### `POST /rooms/{game_id}/dm/toggle-auto`
+Toggle autonomous DM mode (admin only).
+
+**Request:**
+```json
+{ "player_id": "admin_player_id" }
+```
+
+**Response:**
+```json
+{ "auto": true }
+```
+
+---
+
+### `GET /rooms/{game_id}/dm/status`
+Get DM status including idle time and intervention count.
+
+**Response:**
+```json
+{
+  "auto": true,
+  "phase": "playing",
+  "act": 1,
+  "idle_seconds": 45,
+  "interventions": 3
+}
+```
+
+---
+
 ## DM API (`server/api/dm.py`)
 
 ### `POST /rooms/{game_id}/dm/add-clue`
-Add a custom clue (admin only).
+Add a custom clue (admin only). Broadcasts event via WS.
 
 **Request:**
 ```json
@@ -408,10 +503,33 @@ Send a chat message via REST (supplementary to WebSocket chat).
 
 ---
 
+### `GET /rooms/{game_id}/messages`
+Get chat message history for a room.
+
+**Query params:** `limit` (default 50)
+
+**Response:**
+```json
+{
+  "messages": [
+    {
+      "id": "uuid",
+      "from_player_id": "string",
+      "content": "消息内容",
+      "type": "public",
+      "timestamp": "2024-01-01T00:00:00",
+      "from_player_name": "角色名(玩家名)"
+    }
+  ]
+}
+```
+
+---
+
 ## Voting API (`server/api/voting.py`)
 
 ### `POST /rooms/{game_id}/accusations`
-Submit an accusation.
+Submit an accusation. Only allowed in `playing` or `trial` phase. One accusation per player (deduplicated).
 
 **Request:**
 ```json
@@ -430,7 +548,7 @@ Submit an accusation.
 ---
 
 ### `POST /rooms/{game_id}/votes`
-Cast a vote.
+Cast a vote. Only allowed in `playing` or `trial` phase. Latest vote per player wins (deduplicated).
 
 **Request:**
 ```json
@@ -449,7 +567,7 @@ Cast a vote.
 ---
 
 ### `GET /rooms/{game_id}/consensus`
-Check if voting consensus has been reached (≥50% on same target).
+Check if voting consensus has been reached (≥50% on same target, excluding admin).
 
 **Response:**
 ```json
@@ -469,61 +587,51 @@ Check if voting consensus has been reached (≥50% on same target).
 
 ---
 
-## Config API (`server/api/config.py`)
+## LLM Provider API (`server/api/llm.py`)
 
-### `GET /llm-config`
-Get current LLM configuration (API key masked).
+### `GET /llm/providers`
+List all configured LLM providers.
 
 **Response:**
 ```json
-{
-  "endpoint": "http://127.0.0.1:12340",
-  "model": "qwen/qwen3.6-27b",
-  "api_key_set": true,
-  "api_key_masked": "sk-xxxxx..."
-}
+{ "providers": [...] }
 ```
 
 ---
 
-### `POST /llm-config`
-Update LLM configuration at runtime (not persisted to `.env`).
+### `POST /llm/providers`
+Add a new LLM provider.
 
 **Request:**
 ```json
 {
-  "endpoint": "http://new-endpoint:12340",
-  "model": "new-model",
-  "api_key": "new-key"
-}
-```
-
-All fields optional. `null` means "don't change".
-
-**Response:**
-```json
-{
-  "status": "updated",
-  "endpoint": "...",
-  "model": "...",
-  "api_key_set": true,
-  "api_key_masked": "..."
+  "name": "string",
+  "type": "openai|anthropic|gemini",
+  "endpoint": "string",
+  "model": "string",
+  "api_key": "string"
 }
 ```
 
 ---
 
-### `POST /test-llm`
-Test LLM connection. Optionally pass temporary config to test without saving.
+### `DELETE /llm/providers/{name}`
+Remove an LLM provider.
 
-**Request (optional):**
+---
+
+### `POST /llm/providers/active`
+Set the active provider.
+
+**Request:**
 ```json
-{
-  "endpoint": "http://test-endpoint:12340",
-  "model": "test-model",
-  "api_key": "test-key"
-}
+{ "name": "string" }
 ```
+
+---
+
+### `POST /llm/providers/{name}/test`
+Test connection to a provider.
 
 **Response:**
 ```json
@@ -531,24 +639,19 @@ Test LLM connection. Optionally pass temporary config to test without saving.
   "status": "connected",
   "response_time_ms": 1234,
   "model": "model-name",
-  "endpoint": "http://...",
-  "sample_response": "Connection OK"
+  "sample_response": "..."
 }
 ```
-
-On error: `{ "status": "error", "detail": "error message" }`
 
 ---
 
-### `GET /llm-models`
-List available models from the LLM provider.
+### `GET /llm/providers/{name}/models`
+List available models from a provider.
 
-**Response:**
-```json
-{
-  "models": ["model-1", "model-2"]
-}
-```
+---
+
+### `GET /llm-config`
+Get current active LLM configuration (backward-compatible).
 
 ---
 
@@ -557,10 +660,7 @@ Health check endpoint.
 
 **Response:**
 ```json
-{
-  "status": "ok",
-  "games_count": 3
-}
+{ "status": "ok" }
 ```
 
 ---
@@ -568,6 +668,8 @@ Health check endpoint.
 ## WebSocket (`server/websocket_hub.py`)
 
 ### Endpoint: `ws://{host}:{port}/ws/{room_id}/{player_id}`
+
+Server validates that the room exists and the player belongs to it before accepting the connection.
 
 #### On Connect
 Server sends cached state:
@@ -577,7 +679,8 @@ Server sends cached state:
    - `role_card` messages
    - `clue_unlock` messages
    - `dm_private` messages
-   - `accusation` messages
+   - `private_chat` messages
+   - `accusation` + `vote_cast` messages
 4. Last 50 public messages (chat and event)
 5. `system` welcome message
 
@@ -585,11 +688,11 @@ Server sends cached state:
 
 | Type | Fields | Description |
 |---|---|---|
-| `chat` | `content` | Public chat message. Broadcast to room. |
-| `private_chat` | `to_player_id`, `content` | Private message to specific player. Sent to sender and receiver. Cached for reconnect. |
+| `chat` | `content` | Public chat message. Broadcast to room. Updates `last_player_activity`. |
+| `private_chat` | `to_player_id`, `content` | Private message to specific player. Validates receiver exists. Sent to sender and receiver. Cached for reconnect. |
 | `accuse` | `target_role_name`, `reasoning` | Submit accusation. Broadcast to room. Cached for reconnect. |
-| `vote` | `target_role_name`, `reasoning` | Cast vote. Broadcast as `vote_cast`. |
-| `request_advance` | *(none)* | Request DM to generate next event. Non-blocking LLM call. Returns `event` (broadcast) + `dm_private` (per-player). |
+| `vote` | `target_role_name`, `reasoning` | Cast vote (only in playing/trial phase). Added to votes list. Broadcast as `vote_cast`. Cached for reconnect. |
+| `request_advance` | *(none)* | Request DM to generate next event (only in playing phase). Non-blocking LLM call. Returns `event` (broadcast) + `dm_private` (per-player). Error feedback sent to requesting player. |
 
 #### Server → Client Messages
 

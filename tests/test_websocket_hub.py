@@ -86,7 +86,8 @@ def test_ws_accuse():
 
 
 def test_ws_vote():
-    _setup_room_with_players("ws-vote")
+    state = _setup_room_with_players("ws-vote")
+    state.phase = "playing"
     with client.websocket_connect("/ws/ws-vote/p1") as ws:
         _drain_initial_messages(ws)
         ws.send_json({"type": "vote", "target_role_name": "角色A", "reasoning": "投票理由"})

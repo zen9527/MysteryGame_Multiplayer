@@ -53,6 +53,11 @@ async def add_clue(game_id: str, req: AddClueRequest):
 
     _get_manager().add_clue(game_id, req.clue_title, req.clue_content)
     _get_manager().push_event(game_id, f"🔍 新线索发现：{req.clue_title} — {req.clue_content}")
+    # Broadcast to all players via WS so they see the new clue in real-time
+    await _get_hub().broadcast(game_id, {
+        "type": "event",
+        "content": f"🔍 新线索发现：{req.clue_title} — {req.clue_content}",
+    })
     return {"status": "clue_added"}
 
 

@@ -19,6 +19,12 @@ async def add_accusation(game_id: str, req: AccusationRequest):
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
+    if state.phase not in ("playing", "trial"):
+        raise HTTPException(status_code=400, detail="当前阶段不允许指控")
+    # Deduplicate: one accusation per player
+    for a in state.accusations:
+        if a.from_player_id == req.from_player_id:
+            raise HTTPException(status_code=400, detail="你已经提交过指控")
     accusation = Accusation(
         from_player_id=req.from_player_id,
         target_role_name=req.target_role_name,
@@ -34,6 +40,10 @@ async def add_vote(game_id: str, req: VoteRequest):
     state = _get_manager().get_state(game_id)
     if not state:
         raise HTTPException(status_code=404, detail="Room not found")
+    if state.phase not in ("playing", "trial"):
+        raise HTTPException(status_code=400, detail="当前阶段不允许投票")
+    # Deduplicate: one vote per player (latest wins)
+    state.votes = [v for v in state.votes if v.from_player_id != req.from_player_id]
     vote = Vote(
         from_player_id=req.from_player_id,
         target_role_name=req.target_role_name,

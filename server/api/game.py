@@ -133,7 +133,7 @@ def _push_event_generator(game_id: str, state):
         yield f"data: {{\"type\": \"start\"}}\n\n"
 
         event = _get_game_host().generate_event(state)
-        state.current_round += 1
+        _get_manager().increment_round(game_id)
         result = _get_manager().push_structured_event(game_id, event)
 
         done_payload = json.dumps({

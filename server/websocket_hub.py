@@ -81,8 +81,7 @@ class WebSocketHub:
             state = manager.get_state(room_id)
             display_name = _resolve_display_name(state, player_id)
             manager.add_chat_message(room_id, player_id, content, False, None)
-            from datetime import datetime as _dt
-            state.last_player_activity = _dt.now()
+            manager.update_activity(room_id)
             await self.broadcast(room_id, {
                 "type": "chat",
                 "from": display_name,
@@ -98,6 +97,10 @@ class WebSocketHub:
                 return
             if len(content) > MAX_CHAT_LENGTH:
                 content = content[:MAX_CHAT_LENGTH]
+            state = manager.get_state(room_id)
+            # Validate receiver exists in the room
+            if not state or target not in state.players:
+                return
             manager.add_chat_message(room_id, player_id, content, True, target)
             manager.cache_private_chat(room_id, player_id, target, content)
             chat_msg = {
@@ -134,7 +137,19 @@ class WebSocketHub:
                 return
             reasoning = sanitize_string(data.get("reasoning", ""))
             state = manager.get_state(room_id)
+            if not state or state.phase not in ("playing", "trial"):
+                return
             display_name = _resolve_display_name(state, player_id)
+            from server.models import Vote
+            vote = Vote(from_player_id=player_id, target_role_name=target, reasoning=reasoning or "")
+            manager.add_vote(room_id, vote)
+            # Cache vote for WS reconnect
+            state.distributed_accusations.append({
+                "type": "vote_cast",
+                "from": display_name,
+                "from_player_id": player_id,
+                "target": target,
+            })
             await self.broadcast(room_id, {
                 "type": "vote_cast",
                 "from": display_name,
@@ -146,7 +161,7 @@ class WebSocketHub:
             state = manager.get_state(room_id)
             if state and state.phase in ("playing",):
                 try:
-                    state.current_round += 1
+                    manager.increment_round(room_id)
                     game_host = container.resolve("game_host")
                     event = await asyncio.to_thread(game_host.generate_event, state)
                     result = manager.push_structured_event(room_id, event)
@@ -164,6 +179,11 @@ class WebSocketHub:
                             )
                 except Exception as e:
                     manager.add_dm_log(room_id, f"事件生成失败: {e}")
+                    # Send error feedback to the requesting player
+                    await self.send_to_player(room_id, player_id, {
+                        "type": "system",
+                        "content": f"⚠️ 事件生成失败: {e}",
+                    })
 
 
 hub = WebSocketHub()
@@ -171,6 +191,15 @@ hub = WebSocketHub()
 
 @router.websocket("/ws/{room_id}/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, player_id: str):
+    # Validate that the room exists and the player belongs to it
+    state = manager.get_state(room_id)
+    if not state:
+        await websocket.close(code=4004, reason="Room not found")
+        return
+    if player_id not in state.players:
+        await websocket.close(code=4003, reason="Player not in room")
+        return
+
     await hub.connect(room_id, player_id, websocket)
 
     state = manager.get_state(room_id)

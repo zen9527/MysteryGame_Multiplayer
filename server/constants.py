@@ -15,4 +15,4 @@ VALID_PHASES = ["waiting", "playing", "trial", "revealed", "finished"]
 
 ACT_UNLOCK_MAP = {"act1": "2", "act2": "3"}
 
-CONSENSUS_THRESHOLD = 0.5
+CONSENSUS_THRESHOLD = 0.5  # >= threshold; for 2-player game, both must agree

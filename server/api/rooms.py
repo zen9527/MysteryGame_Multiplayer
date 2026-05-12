@@ -110,7 +110,7 @@ async def get_room(game_id: str):
                 "message_id": m.id,
                 "content": m.content,
                 "player_id": m.from_player_id,
-                "role_name": state.players[m.from_player_id].role.name if m.from_player_id in state.players else "__dm__",
+                "role_name": state.players[m.from_player_id].role.name if m.from_player_id in state.players and state.players[m.from_player_id].role else "__dm__",
                 "timestamp": str(m.timestamp),
                 "from_player_name": resolve_display_name_for_message(state, m.from_player_id),
             }).model_dump()
@@ -120,9 +120,11 @@ async def get_room(game_id: str):
 
 
 @router.delete("/rooms/{game_id}")
-async def delete_room(game_id: str):
-    if game_id in _get_manager().games:
-        del _get_manager().games[game_id]
+async def delete_room(game_id: str, req: AdminActionRequest):
+    if game_id not in _get_manager().games:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_admin(req.player_id, game_id)
+    del _get_manager().games[game_id]
     return {"status": "deleted"}
 
 

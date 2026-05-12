@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from typing import Optional, List
 from server.di import container
+from server.config import config
 
 router = APIRouter()
 
@@ -11,8 +12,10 @@ def _get_service():
 
 
 def require_script_admin(admin_key: str = Query(..., alias="admin_key")):
-    """Simple admin key check for script management endpoints"""
-    if admin_key != "admin_secret_key":
+    """Admin key check for script management endpoints. Key set via SCRIPT_ADMIN_KEY env var."""
+    if not config.SCRIPT_ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Script admin key not configured")
+    if admin_key != config.SCRIPT_ADMIN_KEY:
         raise HTTPException(status_code=403, detail="Invalid admin key")
 
 

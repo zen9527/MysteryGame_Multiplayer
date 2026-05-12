@@ -70,15 +70,22 @@ def test_get_room_not_found():
 
 def test_delete_room():
     game_id = _create_room()
-    resp = client.delete(f"/api/rooms/{game_id}")
+    resp = client.request("DELETE", f"/api/rooms/{game_id}", json={"player_id": "admin_1"})
     assert resp.status_code == 200
     assert resp.json()["status"] == "deleted"
     assert _get_manager().get_state(game_id) is None
 
 
+def test_delete_room_non_admin():
+    game_id = _create_room()
+    _get_manager().add_player(game_id, "p1", "路人")
+    resp = client.request("DELETE", f"/api/rooms/{game_id}", json={"player_id": "p1"})
+    assert resp.status_code == 403
+
+
 def test_delete_nonexistent_room():
-    resp = client.delete("/api/rooms/nonexistent")
-    assert resp.status_code == 200
+    resp = client.request("DELETE", "/api/rooms/nonexistent", json={"player_id": "admin_1"})
+    assert resp.status_code == 404
 
 
 def test_add_player_to_room():
