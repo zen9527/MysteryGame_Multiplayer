@@ -159,9 +159,10 @@ import { storeToRefs } from 'pinia';
 import {
   REQUEST_CLUE_TIMEOUT,
   FETCH_STATE_INTERVAL,
+  WS_MAX_RECONNECT_ATTEMPTS,
+  WS_BASE_RECONNECT_DELAY,
 } from '../constants';
-import { WebSocketManager } from '../utils/ws';
-import type { ClientMessage } from '../types/ws';
+import type { WSMessage, ClientMessage } from '../types/ws';
 import GameTimer from './GameTimer.vue';
 import AdminPanel from './AdminPanel.vue';
 import RoleCard from './RoleCard.vue';
@@ -218,7 +219,8 @@ const adminLoading = computed(() =>
 );
 
 // WebSocket
-let wsManager: WebSocketManager | null = null;
+let ws: WebSocket | null = null;
+let reconnectAttempts = 0;
 const messageContainer = ref<HTMLElement | null>(null);
 
 // Convert players Map to array with keys for v-for
@@ -277,14 +279,21 @@ async function fetchState() {
   }
 }
 
-// WebSocket connection using WebSocketManager with exponential backoff
+// WebSocket connection with native API and exponential backoff
 function connectWebSocket() {
-  wsManager = new WebSocketManager(gameId, playerId);
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${protocol}//${window.location.host}/ws/${gameId}/${playerId}`;
+  ws = new WebSocket(url);
 
-  wsManager.connect(
-    (msg) => {
+  ws.onopen = () => {
+    reconnectAttempts = 0;
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data) as WSMessage;
       // Route through store for state management
-      store.handleWSMessage(msg as any);
+      store.handleWSMessage(msg);
 
       // Clear requestingClue when an event comes back from DM
       if (msg.type === 'event') {
@@ -297,13 +306,41 @@ function connectWebSocket() {
           if (messageContainer.value) messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
         });
       }
-    },
-    () => {}
-  );
+    } catch (e) {
+      console.error('Failed to parse WebSocket message:', e);
+    }
+  };
+
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
+
+  ws.onclose = (event) => {
+    // Handle different close codes
+    const CLOSE_CODE_ROOM_NOT_FOUND = 4001;
+    const CLOSE_CODE_PLAYER_NOT_FOUND = 4002;
+    const CLOSE_CODE_GAME_FINISHED = 4003;
+
+    if (event.code === CLOSE_CODE_ROOM_NOT_FOUND || 
+        event.code === CLOSE_CODE_PLAYER_NOT_FOUND ||
+        event.code === CLOSE_CODE_GAME_FINISHED) {
+      // Invalid connection - don't reconnect
+      return;
+    }
+
+    // Attempt reconnection with exponential backoff
+    if (reconnectAttempts < WS_MAX_RECONNECT_ATTEMPTS) {
+      const delay = WS_BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts);
+      setTimeout(() => connectWebSocket(), delay);
+      reconnectAttempts++;
+    }
+  };
 }
 
 function sendWSMessage(type: "join" | "chat" | "private_chat" | "role_read" | "accuse" | "vote" | "request_advance", data: Record<string, any> = {}) {
-  wsManager?.send({ type, ...data } as ClientMessage);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type, ...data } as ClientMessage));
+  }
 }
 
 // Send public chat (WS only — server handles persistence)
@@ -567,7 +604,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  wsManager?.disconnect();
+  if (ws) ws.close();
 });
 </script>
 

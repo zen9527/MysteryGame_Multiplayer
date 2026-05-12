@@ -13,6 +13,7 @@ from server.utils.validation import (
     PlayerLeaveRequest,
     sanitize_string,
 )
+from server.models import WsClue, CluePhase, ClueType, ChatMessage
 
 router = APIRouter()
 
@@ -92,16 +93,27 @@ async def get_room(game_id: str):
             "roles_count": len(state.script.roles),
             "plot_outline": state.script.plot_outline.model_dump(),
         } if state.script_generated else None,
-        "clues": [c.model_dump() for c in state.script.clues],
+        "clues": [
+            WsClue.model_validate({
+                "id": c.id,
+                "title": c.title,
+                "content": c.content,
+                "unlock_phase": c.unlock_phase if hasattr(c, 'unlock_phase') else "act1",
+                "clue_type": c.clue_type if hasattr(c, 'clue_type') else "public",
+                "related_role_id": c.related_role_id if hasattr(c, 'related_role_id') else None,
+            }).model_dump()
+            for c in state.script.clues
+        ],
         "votes": [v.model_dump() for v in state.votes],
         "public_messages": [
-            {
-                "from_player_id": m.from_player_id,
-                "from_player_name": resolve_display_name_for_message(state, m.from_player_id),
+            ChatMessage.model_validate({
+                "message_id": m.id,
                 "content": m.content,
-                "type": m.type,
+                "player_id": m.from_player_id,
+                "role_name": state.players[m.from_player_id].role.name if m.from_player_id in state.players else "__dm__",
                 "timestamp": str(m.timestamp),
-            }
+                "from_player_name": resolve_display_name_for_message(state, m.from_player_id),
+            }).model_dump()
             for m in state.public_messages[-MAX_PUBLIC_MESSAGE_HISTORY:]
         ],
     }
