@@ -58,25 +58,30 @@ npm run dev
 ```
 剧本杀/
 ├── server/                    # FastAPI 后端
-│   ├── main.py                # 应用入口
-│   ├── config.py              # 配置管理
-│   ├── llm_client.py          # LLM API 客户端
-│   ├── models.py              # Pydantic 数据模型
-│   ├── game_manager.py        # 游戏状态管理
-│   ├── host_dm.py             # LLM 主持人逻辑
-│   ├── websocket_hub.py       # WebSocket 房间管理
-│   ├── api_routes.py          # REST API 路由
-│   └── middleware.py          # CORS 中间件
+│   ├── main.py                # 应用入口，注册 DI 和中间件
+│   ├── config.py              # 配置管理（LLM_ENDPOINT, LLM_MODEL 等）
+│   ├── models.py              # Pydantic 数据模型（Script, Role, Clue, GameState 等）
+│   ├── game_manager.py        # GameManager — 内存游戏状态管理
+│   ├── websocket_hub.py       # WebSocketHub — WS 连接路由和广播
+│   ├── llm_client.py          # LLMClient — OpenAI 兼容聊天 API 客户端
+│   ├── middleware.py          # CORS 中间件和 require_admin 守卫
+│   ├── di/                    # 依赖注入容器
+│   ├── api/                   # 模块化 API 路由（rooms, game, script, dm, chat, voting）
+│   ├── utils/                 # 共享工具（display_name, endpoint normalization）
+│   ├── script_engine/         # 剧本生成模块（models, templates, generator）
+│   └── game_engine/           # 自主 DM 引擎（host, scheduler, prompts）
 │
 ├── client/                    # Vue 3 前端
 │   ├── src/
 │   │   ├── App.vue
 │   │   ├── main.ts
-│   │   ├── router.ts          # Vue Router 路由配置
-│   │   ├── stores/game.ts     # Pinia 状态管理（角色卡、私信、线索、公聊、去重）
+│   │   ├── router.ts          # Vue Router 路由配置（/, /join/:gameId, /lobby/:gameId, /game/:gameId）
+│   │   ├── stores/game.ts     # Pinia 状态管理（phase, act, messages, players, roleCard, clues 等）
 │   │   ├── types/ws.ts        # WebSocket 类型定义
-│   │   ├── utils/ws.ts        # WebSocketManager（已废弃 — GamePage 使用直连 WS）
-│   │   └── components/        # 12 个组件
+│   │   ├── utils/ws.ts        # WebSocketManager（WS 连接管理）
+│   │   ├── utils/sse.ts       # SSE 流消费
+│   │   ├── composables/       # useWebSocket, useSSE, useGameActions
+│   │   └── components/        # 核心组件
 │   │       ├── GamePage.vue           # 主游戏页面（左：公聊/事件，右：Tab 导航）
 │   │       ├── RoleCard.vue           # 角色卡（分层解锁 + 折叠）
 │   │       ├── PrivateChatPanel.vue   # DM 私信面板
@@ -86,15 +91,15 @@ npm run dev
 │   │       ├── RoomJoin.vue           # 加入房间
 │   │       ├── GameTimer.vue          # 倒计时组件
 │   │       ├── AdminPanel.vue         # 管理员面板
-│   │       ├── ScriptEditor.vue       # 剧本编辑器
-│   │       └── ChatPanel.vue          # 聊天面板（遗留组件）
-│   └── tests/                 # 前端组件测试
+│   │       └── ScriptEditor.vue       # 剧本编辑器
+│   └── tests/                 # 前端组件测试（Vitest）
 │
 ├── shared/                    # 共享类型/Schema
 │   ├── ws_types.py            # 后端 Pydantic 校验
 │   └── schemas.ts             # 前端 Zod 校验
 │
-├── tests/                     # 后端单元测试 & 集成测试
+├── tests/                     # 后端单元测试 & 集成测试（pytest）
+├── docs/                      # 设计文档和架构说明
 ├── requirements.txt           # Python 依赖
 └── .gitignore
 ```
@@ -117,5 +122,5 @@ npm test
 ---
 
 **作者**: Flex  
-**版本**: v6.0.0  
-**最近更新**: DM 私信流式对话 + 推进幕次 + 线索分发修复 + WS 重连缓存补全
+**版本**: v7.0.0  
+**最近更新**: 项目结构清理 + 架构文档更新 + DI 容器整合
