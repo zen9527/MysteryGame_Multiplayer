@@ -419,7 +419,6 @@ async function generateScript() {
 async function confirmScript() {
   // Script is already saved on server via generate-script endpoint
   // This just confirms we're ready to proceed
-  console.log('Script confirmed');
 }
 
 async function fetchState() {

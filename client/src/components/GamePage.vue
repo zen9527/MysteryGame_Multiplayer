@@ -161,6 +161,7 @@ import {
   FETCH_STATE_INTERVAL,
 } from '../constants';
 import { WebSocketManager } from '../utils/ws';
+import type { ClientMessage } from '../types/ws';
 import GameTimer from './GameTimer.vue';
 import AdminPanel from './AdminPanel.vue';
 import RoleCard from './RoleCard.vue';
@@ -297,14 +298,12 @@ function connectWebSocket() {
         });
       }
     },
-    () => {
-      console.log('WS disconnected, max reconnect attempts reached');
-    }
+    () => {}
   );
 }
 
-function sendWSMessage(type: string, data: Record<string, any> = {}) {
-  wsManager?.send({ type, ...data });
+function sendWSMessage(type: "join" | "chat" | "private_chat" | "role_read" | "accuse" | "vote" | "request_advance", data: Record<string, any> = {}) {
+  wsManager?.send({ type, ...data } as ClientMessage);
 }
 
 // Send public chat (WS only — server handles persistence)
@@ -413,14 +412,12 @@ async function handlePushEvent() {
             }
             switch (data.type) {
               case 'start':
-                console.log('[push-event] LLM starting...');
                 break;
               case 'chunk':
                 // Token streaming — no UI feedback needed (adminLoading stays true)
                 break;
               case 'done':
                 currentEvent.value = data.public_event || '';
-                console.log(`[push-event] Done: ${data.private_clues_count} private clues`);
                 break;
               case 'error':
                 throw new Error(data.message);
@@ -470,8 +467,6 @@ async function handlePushEvent() {
         const err = await res.json().catch(() => ({}));
         alert(err.detail || '推进失败');
       } else {
-        const data = await res.json();
-        console.log(`[advance-act] Now at act ${data.act}`);
         fetchState();
       }
     } catch (e) {

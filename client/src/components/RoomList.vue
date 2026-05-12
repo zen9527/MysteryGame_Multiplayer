@@ -39,7 +39,6 @@ async function createRoom() {
 }
 
 async function joinRoom(gameId: string) {
-  console.log('Joining room:', gameId);
   router.push(`/join/${gameId}`);
 }
 
@@ -47,7 +46,6 @@ onMounted(async () => {
   try {
     const res = await fetch('/api/rooms');
     const data = await res.json();
-    console.log('Rooms loaded:', data);
     rooms.value = data;
   } catch (e) {
     console.error('Failed to load rooms:', e);

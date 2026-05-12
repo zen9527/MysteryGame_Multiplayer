@@ -120,7 +120,6 @@ async function sendDMPrivate() {
             }
             switch (data.type) {
               case 'start':
-                console.log('[chat-response] DM starting...');
                 break;
               case 'chunk':
                 pendingReply.value += data.content;
@@ -135,7 +134,6 @@ async function sendDMPrivate() {
                   content: data.content,
                   timestamp: '',
                 });
-                console.log(`[chat-response] Done: ${data.content.length} chars`);
                 break;
               case 'error':
                 throw new Error(data.message);
