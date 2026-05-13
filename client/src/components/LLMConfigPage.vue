@@ -124,11 +124,21 @@ async function fetchModels() {
   fetchingModels.value = true;
   models.value = [];
   try {
-    const res = await fetch(`${normalizeEndpoint(endpoint.value)}/v1/models`);
+    // Build models URL, handling different endpoint formats
+    const normalized = normalizeEndpoint(endpoint.value);
+    let modelsUrl: string;
+    if (normalized.includes('/v1') || normalized.includes('/v4')) {
+      modelsUrl = `${normalized}/models`;
+    } else {
+      modelsUrl = `${normalized}/v1/models`;
+    }
+    
+    const res = await fetch(modelsUrl);
     if (res.ok) {
       const data = await res.json();
       models.value = data.data?.map((m: any) => m.id) || [];
     } else {
+      console.error('Failed to fetch models:', res.status, await res.text());
       models.value = [];
     }
   } catch (err) {
