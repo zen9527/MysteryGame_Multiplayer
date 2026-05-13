@@ -1,5 +1,5 @@
 <template>
-  <div class="clock-container">
+  <div class="clock-container" aria-label="游戏时间时钟">
     <div class="analog-clock">
       <div class="clock-center"></div>
       <div 
@@ -26,7 +26,7 @@ const minuteDeg = ref(0);
 const secondDeg = ref(0);
 const digitalTime = ref('');
 
-let timer: number | null = null;
+let timer: ReturnType<typeof setInterval> | null = null;
 
 function updateClock() {
   const now = new Date();
