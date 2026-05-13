@@ -1,22 +1,29 @@
+<!-- client/src/App.vue -->
 <template>
   <div id="app">
-    <router-view />
+    <CollapsibleSidebar />
+    <main class="main-content">
+      <router-view />
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
-// 后续添加路由
+import CollapsibleSidebar from './components/common/CollapsibleSidebar.vue';
 </script>
 
 <style>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@import './styles/variables.css';
+
+#app {
+  display: flex;
+  min-height: 100vh;
 }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #1a1a2e;
-  color: #eee;
+
+.main-content {
+  margin-left: 80px;
+  flex: 1;
+  background: var(--bg-tertiary);
+  min-height: 100vh;
 }
 </style>
