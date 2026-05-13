@@ -1,0 +1,108 @@
+import { defineStore } from 'pinia';
+import { ref, computed } from 'vue';
+import type { ScriptDetail } from '@/types/script';
+
+export interface GenerationFormData {
+  genre: string;
+  difficulty: string;
+  playerCount: number;
+}
+
+export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
+  // State
+  const currentStep = ref(1);
+  const formData = ref<GenerationFormData>({
+    genre: '',
+    difficulty: '',
+    playerCount: 4,
+  });
+  const generating = ref(false);
+  const generationStatus = ref('');
+  const generatedScript = ref<ScriptDetail | null>(null);
+  const error = ref<string | null>(null);
+
+  // Constants
+  const genres = ['悬疑推理', '古风权谋', '现代都市', '恐怖惊悚', '欢乐搞笑', '科幻未来'];
+  const difficulties = ['简单', '中等', '困难'];
+  const steps = [1, 2, 3, 4, 5];
+
+  // Computed
+  const canProceed = computed(() => {
+    if (currentStep.value === 1) return formData.value.genre !== '';
+    if (currentStep.value === 2) return formData.value.difficulty !== '';
+    if (currentStep.value === 3) return true;
+    if (currentStep.value === 4) return generatedScript.value !== null;
+    return false;
+  });
+
+  const currentStepLabel = computed(() => {
+    const labels: Record<number, string> = {
+      1: '选择类型',
+      2: '选择难度',
+      3: '设置人数',
+      4: '生成中',
+      5: '确认',
+    };
+    return labels[currentStep.value];
+  });
+
+  // Actions
+  function updateFormData(partial: Partial<GenerationFormData>) {
+    formData.value = { ...formData.value, ...partial };
+  }
+
+  function selectGenre(genre: string) {
+    formData.value.genre = genre;
+  }
+
+  function selectDifficulty(difficulty: string) {
+    formData.value.difficulty = difficulty;
+  }
+
+  function setPlayerCount(count: number) {
+    formData.value.playerCount = Math.max(3, Math.min(8, count));
+  }
+
+  function nextStep() {
+    if (currentStep.value < 5) {
+      currentStep.value++;
+    }
+  }
+
+  function prevStep() {
+    if (currentStep.value > 1) {
+      currentStep.value--;
+    }
+  }
+
+  function reset() {
+    currentStep.value = 1;
+    formData.value = { genre: '', difficulty: '', playerCount: 4 };
+    generatedScript.value = null;
+    error.value = null;
+  }
+
+  return {
+    // State
+    currentStep,
+    formData,
+    generating,
+    generationStatus,
+    generatedScript,
+    error,
+    genres,
+    difficulties,
+    steps,
+    // Computed
+    canProceed,
+    currentStepLabel,
+    // Actions
+    updateFormData,
+    selectGenre,
+    selectDifficulty,
+    setPlayerCount,
+    nextStep,
+    prevStep,
+    reset,
+  };
+});
