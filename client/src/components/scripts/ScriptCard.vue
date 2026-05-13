@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ script: { id: string; title: string; genre: string; difficulty?: string; player_count?: number; created_at?: string; description?: string; background_story?: string; }; active: boolean; }>();
+defineProps<{ script: { id: string; title: string; genre: string; difficulty?: string; player_count?: number; created_at?: string; description?: string; background_story?: string; }; active: boolean; }>();
 function formatDate(date: string): string { return new Date(date).toLocaleDateString('zh-CN'); }
 function truncate(text: string, length: number): string { return text.length > length ? text.slice(0, length) + '...' : text; }
 </script>

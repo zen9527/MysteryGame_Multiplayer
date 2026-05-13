@@ -181,9 +181,10 @@ async function deleteScript() {
     deselectScript();
     await fetchScripts();
     alert('剧本已删除');
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : '未知错误';
     console.error('Failed to delete script:', error);
-    alert('删除失败：' + error.message);
+    alert('删除失败：' + errorMessage);
   }
 }
 
