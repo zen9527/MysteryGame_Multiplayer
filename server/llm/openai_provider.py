@@ -31,8 +31,22 @@ class OpenAIProvider(LLMProvider):
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
+    def _get_chat_url(self) -> str:
+        """Get chat completion URL, handling different endpoint formats."""
+        # If endpoint already contains /v1 or /v4, use it as-is
+        if "/v1/" in self.endpoint or "/v4/" in self.endpoint:
+            return f"{self.endpoint}/chat/completions"
+        # Otherwise, add /v1 prefix (standard OpenAI format)
+        return f"{self.endpoint}/v1/chat/completions"
+
+    def _get_models_url(self) -> str:
+        """Get models URL, handling different endpoint formats."""
+        if "/v1/" in self.endpoint or "/v4/" in self.endpoint:
+            return f"{self.endpoint}/models"
+        return f"{self.endpoint}/v1/models"
+
     def chat(self, messages: list[dict], temperature: float = 0.7, timeout: int = 120) -> str:
-        url = f"{self.endpoint}/v1/chat/completions"
+        url = self._get_chat_url()
         payload = {"model": self.model, "messages": messages, "temperature": temperature}
         log.info(f"[LLM:{self.name}] POST {url}, model='{self.model}', msgs={len(messages)}")
 
@@ -91,7 +105,7 @@ class OpenAIProvider(LLMProvider):
             log.error(f"[LLM:{self.name}] Stream read timed out")
 
     def list_models(self) -> list[str]:
-        url = f"{self.endpoint}/v1/models"
+        url = self._get_models_url()
         resp = requests.get(url, headers=self._headers(), timeout=30)
         resp.raise_for_status()
         data = resp.json()
