@@ -105,6 +105,27 @@ python server/scripts/cleanup_duplicates.py --non-interactive
 
 ### 4. Batch Script Rewrite
 
+#### start.ps1 (Final Solution)
+
+**Problem:** Multi-line PowerShell in batch files causes encoding and syntax errors.
+
+**Solution:** Separate PowerShell script with pure ASCII text.
+
+**Key Features:**
+- Full PowerShell implementation (107 lines)
+- Step-by-step progress indicators
+- Environment checks with version display
+- Dependency installation with status
+- Clear success/failure messages
+- UTF-8 encoding handled by PowerShell natively
+- Uses English text to avoid encoding issues
+
+**Execution:**
+```powershell
+# start.bat simply calls:
+powershell -ExecutionPolicy Bypass -File "%~dp0start.ps1"
+```
+
 #### stop.bat
 
 **Old Issues:**
@@ -114,52 +135,13 @@ python server/scripts/cleanup_duplicates.py --non-interactive
 - Silent failures
 
 **New Features:**
-- Proper try/catch error handling
-- Process name display for clarity
+- Single-line PowerShell commands per port
+- Clear status messages (green/gray)
 - Graceful handling of missing processes
-- Clear status messages (green/yellow/red)
-- UTF-8 encoding support
 
 **Key Improvements:**
-```powershell
-try {
-    $conn = Get-NetTCPConnection -LocalPort $port -ErrorAction Stop
-    if ($conn) {
-        $processId = $conn.OwningProcess
-        $process = Get-Process -Id $processId
-        Stop-Process -Id $processId -Force
-        Write-Host "已停止端口 $port (进程：$processId - $($process.ProcessName))"
-    }
-} catch {
-    Write-Host "检查端口 $port 时出错：$_" -ForegroundColor Red
-}
-```
-
-#### start.bat
-
-**Old Issues:**
-- Single-line PowerShell command (hard to read/debug)
-- No progress feedback
-- Silent dependency checks
-
-**New Features:**
-- Multi-line readable PowerShell
-- Step-by-step progress indicators
-- Environment check with version display
-- Dependency installation with status
-- Clear success/failure messages
-- UTF-8 encoding support
-
-**Key Improvements:**
-```powershell
-Write-Host '检查环境...' -ForegroundColor Cyan
-try {
-    $pythonVersion = python --version 2>&1
-    Write-Host "  ✓ Python: $pythonVersion" -ForegroundColor Green
-} catch {
-    Write-Host '  ✗ Python 未安装' -ForegroundColor Red
-    exit 1
-}
+```batch
+powershell -Command "$p = Get-NetTCPConnection -LocalPort 8000 ...; if ($p) { Stop-Process ... }"
 ```
 
 ## Testing
@@ -192,8 +174,9 @@ python server/scripts/cleanup_duplicates.py --non-interactive
 | `client/src/router.ts` | MODIFIED | Added `/settings` route |
 | `client/src/pages/RoomCreate.vue` | MODIFIED | Fixed left margin (120px) |
 | `server/scripts/cleanup_duplicates.py` | NEW | Duplicate cleanup tool |
-| `stop.bat` | REWRITE | Robust PowerShell syntax |
-| `start.bat` | REWRITE | Better progress feedback |
+| `stop.bat` | REWRITE | Simple PowerShell commands |
+| `start.bat` | REWRITE | Calls start.ps1 |
+| `start.ps1` | NEW | Full PowerShell implementation |
 
 ## Design Principles Applied
 
