@@ -59,9 +59,37 @@
         </div>
       </div>
 
-      <!-- Step 4: Generation Placeholder -->
+      <!-- Step 4: Generation -->
       <div v-if="store.currentStep === 4" class="step-content">
-        <p>生成功能待实现...</p>
+        <h2>正在生成剧本...</h2>
+        
+        <!-- Loading State -->
+        <div v-if="store.generating" class="generation-status">
+          <div class="spinner"></div>
+          <p>{{ store.generationStatus }}</p>
+        </div>
+        
+        <!-- Success Preview -->
+        <div v-if="store.generatedScript" class="preview-panel">
+          <h3>生成结果预览</h3>
+          <div class="script-preview">
+            <h4>{{ store.generatedScript.title }}</h4>
+            <p class="meta">
+              {{ store.generatedScript.genre }} · 
+              {{ store.generatedScript.difficulty }} · 
+              {{ store.generatedScript.player_count }}人
+            </p>
+            <p v-if="store.generatedScript.background_story" class="preview-text">
+              {{ store.generatedScript.background_story.slice(0, 200) }}...
+            </p>
+          </div>
+        </div>
+        
+        <!-- Error State -->
+        <div v-if="store.error" class="error-message">
+          ⚠️ {{ store.error }}
+          <button @click="retryGeneration" class="retry-btn">重试</button>
+        </div>
       </div>
 
       <!-- Step 5: Confirmation Placeholder -->
@@ -96,7 +124,21 @@ function updatePlayerCount() {
 
 async function handleNext() {
   if (!store.canProceed) return;
+  
+  if (store.currentStep === 3) {
+    try {
+      await store.generateScript();
+    } catch (error) {
+      // Error already set in store, don't proceed
+      return;
+    }
+  }
+  
   store.nextStep();
+}
+
+function retryGeneration() {
+  store.generateScript();
 }
 </script>
 
@@ -323,5 +365,81 @@ async function handleNext() {
 .cancel-btn:hover {
   border-color: var(--text-muted);
   color: var(--text-primary);
+}
+
+/* Generation Status */
+.generation-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-2xl);
+}
+
+.spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid var(--border-medium);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.preview-panel {
+  margin-top: var(--space-xl);
+  padding: var(--space-lg);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-medium);
+}
+
+.preview-panel h3 {
+  font-size: 20px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-md);
+}
+
+.script-preview h4 {
+  font-size: 24px;
+  color: var(--accent-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.script-preview .meta {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-md);
+}
+
+.script-preview .preview-text {
+  font-size: 16px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.error-message {
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  color: var(--error);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+.retry-btn {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--error);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 600;
 }
 </style>

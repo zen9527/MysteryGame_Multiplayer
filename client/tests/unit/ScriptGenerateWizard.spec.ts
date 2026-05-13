@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createTestingPinia } from '@pinia/testing';
+import { useScriptGeneratorStore } from '@/stores/scriptGenerator';
 import ScriptGenerateWizard from '@/components/scripts/ScriptGenerateWizard.vue';
 
 describe('ScriptGenerateWizard', () => {
@@ -257,27 +258,58 @@ describe('ScriptGenerateWizard', () => {
     });
   });
 
-  describe('Steps 4-5 Placeholders', () => {
-    it('shows generation placeholder on step 4', async () => {
+  describe('Step 4 Generation', () => {
+    it('shows generation loading state on step 4', async () => {
       const wrapper = mountComponent();
+      const store = useScriptGeneratorStore();
       
-      // Navigate to step 4 (need to complete steps 1-3)
-      await wrapper.find('.genre-grid button').trigger('click');
-      await wrapper.find('.wizard-nav button:last-child').trigger('click');
-      await wrapper.find('.difficulty-options button').trigger('click');
-      await wrapper.find('.wizard-nav button:last-child').trigger('click');
-      // Step 3 auto-enables, click next
-      await wrapper.find('.wizard-nav button:last-child').trigger('click');
+      // Set form data and directly set step to 4
+      store.selectGenre('悬疑推理');
+      store.selectDifficulty('中等');
+      store.currentStep = 4;
+      store.generating = true;
+      store.generationStatus = '正在连接 LLM...';
+      await wrapper.vm.$nextTick();
       
-      expect(wrapper.text()).toContain('生成功能待实现');
+      // Step 4 should show generation UI elements
+      expect(wrapper.text()).toContain('正在生成剧本');
+      expect(wrapper.find('.spinner').exists()).toBe(true);
+      expect(wrapper.text()).toContain('正在连接 LLM');
     });
 
-    it('shows confirmation placeholder on step 5', async () => {
+    it('shows retry button when generation fails', async () => {
       const wrapper = mountComponent();
+      const store = useScriptGeneratorStore();
       
-      // Navigate to step 5 (stub for now)
-      // This test documents expected behavior for Task 3
-      expect(true).toBe(true); // Placeholder until generation is implemented
+      // Set form data and directly set step to 4 with error
+      store.selectGenre('悬疑推理');
+      store.currentStep = 4;
+      store.error = 'Generation failed';
+      await wrapper.vm.$nextTick();
+      
+      expect(wrapper.find('.retry-btn').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Generation failed');
+    });
+
+    it('shows script preview when generation succeeds', async () => {
+      const wrapper = mountComponent();
+      const store = useScriptGeneratorStore();
+      
+      // Set form data and directly set step to 4 with generated script
+      store.selectGenre('悬疑推理');
+      store.currentStep = 4;
+      store.generatedScript = {
+        title: 'Test Script',
+        genre: '悬疑推理',
+        difficulty: '中等',
+        player_count: 5,
+        background_story: 'This is a test background story.',
+      } as any;
+      await wrapper.vm.$nextTick();
+      
+      expect(wrapper.find('.preview-panel').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Test Script');
+      expect(wrapper.text()).toContain('生成结果预览');
     });
   });
 });

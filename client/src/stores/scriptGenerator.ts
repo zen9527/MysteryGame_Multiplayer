@@ -2,6 +2,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { ScriptDetail } from '@/types/script';
 
+const API_BASE = '/api/scripts';
+
 export interface GenerationFormData {
   genre: string;
   difficulty: string;
@@ -63,6 +65,59 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
     formData.value.playerCount = Math.max(3, Math.min(8, count));
   }
 
+  async function generateScript() {
+    generating.value = true;
+    generationStatus.value = '正在连接 LLM...';
+    error.value = null;
+    
+    try {
+      const response = await fetch(`${API_BASE}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          genre: formData.value.genre,
+          difficulty: formData.value.difficulty,
+          player_count: formData.value.playerCount,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Generation failed: ${response.status}`);
+      }
+      
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('ReadableStream not supported');
+      }
+      
+      const decoder = new TextDecoder();
+      let accumulated = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        accumulated += chunk;
+        generationStatus.value = '正在生成剧本...';
+      }
+      
+      // Parse final JSON from SSE data
+      const jsonMatch = accumulated.match(/data:\s*(\{.*\})/s);
+      if (jsonMatch && jsonMatch[1]) {
+        generatedScript.value = JSON.parse(jsonMatch[1]);
+      } else {
+        throw new Error('Failed to parse generated script');
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '未知错误';
+      generationStatus.value = '生成失败';
+      throw err;
+    } finally {
+      generating.value = false;
+    }
+  }
+
   function nextStep() {
     if (currentStep.value < 5) {
       currentStep.value++;
@@ -101,6 +156,7 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
     selectGenre,
     selectDifficulty,
     setPlayerCount,
+    generateScript,
     nextStep,
     prevStep,
     reset,
