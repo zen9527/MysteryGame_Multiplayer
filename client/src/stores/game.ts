@@ -67,7 +67,8 @@ export const useGameStore = defineStore('game', () => {
   const availableScripts = ref<ScriptMetadata[]>([]);
 
   // Dedup counter for same-from-same-content messages (allows duplicates with different timestamps)
-  const messageCounter = ref<Map<string, number>>(new Map());
+  // TODO: Implement counter logic when needed
+  // const messageCounter = ref<Map<string, number>>(new Map());
 
   function _addPublicMessage(from: string, content: string, timestamp: string, isEvent = false) {
     // Key includes a counter to allow same content from same sender (e.g., rapid identical chat)
