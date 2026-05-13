@@ -14,7 +14,7 @@ const routes = [
   { path: '/game/:gameId', component: GamePage },
   { path: '/create', component: RoomCreate },
   { path: '/scripts', component: ScriptsPage },
-  { path: '/scripts/generate', component: () => import('./components/scripts/ScriptGenerateWizard.vue'), meta: { placeholder: true } },
+  { path: '/scripts/generate', component: () => import('./components/scripts/ScriptGenerateWizard.vue') },
   { path: '/scripts/edit/:id', component: () => import('./components/scripts/ScriptEditor.vue'), meta: { placeholder: true } },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
