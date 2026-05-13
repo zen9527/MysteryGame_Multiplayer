@@ -102,6 +102,24 @@ async def list_provider_models(name: str):
         return {"models": [], "error": str(e)}
 
 
+# Proxy endpoint for frontend to fetch models (avoids CORS)
+@router.get("/llm/models")
+async def proxy_fetch_models():
+    """Proxy endpoint for frontend to fetch LLM models.
+    Frontend calls this instead of directly calling the LLM provider API.
+    """
+    registry = _get_registry()
+    try:
+        provider = registry.get_active()
+    except ValueError:
+        raise HTTPException(status_code=404, detail="No active provider")
+    try:
+        models = await run_in_threadpool(provider.list_models)
+        return {"data": [{"id": m, "object": "model"} for m in models]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Backward-compatible endpoints
 @router.get("/llm-config")
 async def get_llm_config():

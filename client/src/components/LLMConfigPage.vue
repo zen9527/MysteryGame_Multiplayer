@@ -124,16 +124,8 @@ async function fetchModels() {
   fetchingModels.value = true;
   models.value = [];
   try {
-    // Build models URL, handling different endpoint formats
-    const normalized = normalizeEndpoint(endpoint.value);
-    let modelsUrl: string;
-    if (normalized.includes('/v1') || normalized.includes('/v4')) {
-      modelsUrl = `${normalized}/models`;
-    } else {
-      modelsUrl = `${normalized}/v1/models`;
-    }
-    
-    const res = await fetch(modelsUrl);
+    // Use backend proxy to avoid CORS issues
+    const res = await fetch('/api/llm/models');
     if (res.ok) {
       const data = await res.json();
       models.value = data.data?.map((m: any) => m.id) || [];
