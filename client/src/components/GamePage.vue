@@ -622,54 +622,200 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.game-page { min-height: 100vh; display: flex; flex-direction: column; }
-.game-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: rgba(0, 0, 0, 0.3); border-bottom: 1px solid #333; }
-.game-header h1 { font-size: 20px; color: #eee; }
-.phase-badge { padding: 4px 12px; background: #e94560; border-radius: 12px; font-size: 12px; color: #fff; }
-.game-body { display: flex; flex: 1; gap: 16px; padding: 16px; overflow: hidden; }
-.main-panel { flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@import '../styles/variables.css';
 
-.event-section { background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 16px; flex-shrink: 0; max-height: 200px; overflow-y: auto; }
-.event-section h2 { font-size: 16px; color: #aaa; margin-bottom: 12px; }
-.event-content { background: rgba(0, 0, 0, 0.2); padding: 12px; border-radius: 6px; line-height: 1.6; color: #ddd; white-space: pre-wrap; }
-.event-content.generating { background: rgba(233, 69, 96, 0.15); color: #e94560; animation: pulse 1.5s ease-in-out infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-.no-event { color: #666; font-style: italic; }
+.game-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px); /* Account for sidebar */
+  padding: var(--space-lg);
+  background: var(--bg-primary);
+}
 
-.act-banner { background: linear-gradient(135deg, #8e44ad, #0f3460); border-radius: 8px; padding: 16px; margin-bottom: 16px; animation: banner-appear 0.5s ease-out; }
-.act-banner-content { text-align: center; }
-.act-banner-title { font-size: 18px; font-weight: bold; color: #fff; display: block; margin-bottom: 8px; }
-.act-banner-text { font-size: 13px; color: #ddd; line-height: 1.6; }
-@keyframes banner-appear { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+.game-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-lg);
+}
 
-.chat-section { flex: 1; background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; min-height: 0; }
-.chat-section h2 { font-size: 16px; color: #aaa; margin-bottom: 12px; }
-.messages { flex: 1; overflow-y: auto; padding-right: 8px; min-height: 0; }
-.message-item { padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
-.dm-message { background: rgba(233, 69, 96, 0.1); padding: 8px; border-radius: 4px; margin-bottom: 4px; }
-.sender { font-weight: bold; color: #e94560; margin-right: 8px; }
-.text { color: #ddd; }
+.game-header h1 {
+  font-size: 24px;
+  color: var(--text-primary);
+}
 
-.chat-input-row { display: flex; gap: 8px; margin-top: 12px; }
-.chat-input-row input { flex: 1; padding: 10px; border: 1px solid #444; border-radius: 6px; background: rgba(0, 0, 0, 0.3); color: #eee; }
-.chat-input-row button { padding: 10px 20px; border: none; border-radius: 6px; background: #e94560; color: #fff; cursor: pointer; }
+.phase-badge {
+  padding: var(--space-xs) var(--space-md);
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+}
 
-.side-panel { width: 360px; flex-shrink: 0; display: flex; flex-direction: column; overflow-y: auto; max-height: calc(100vh - 80px); }
+.game-body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--space-lg);
+  flex: 1;
+  min-height: 0;
+}
 
-.tab-nav { display: flex; gap: 4px; margin-bottom: 8px; }
+.main-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  overflow-y: auto;
+}
+
+.event-section, .chat-section {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+
+.event-section h2, .chat-section h2 {
+  font-size: 16px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-md);
+}
+
+.event-content {
+  padding: var(--space-md);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.event-content.generating {
+  color: var(--accent-primary);
+}
+
+.no-event {
+  color: var(--text-muted);
+  padding: var(--space-md);
+  text-align: center;
+}
+
+.act-banner {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  padding: var(--space-lg);
+  border-radius: var(--radius-lg);
+  color: var(--bg-primary);
+}
+
+.act-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.act-banner-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.act-banner-text {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.messages {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.message-item {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.message-item.dm-message {
+  background: rgba(121, 192, 255, 0.1);
+  border-left: 3px solid var(--accent-primary);
+}
+
+.sender {
+  font-weight: bold;
+  color: var(--accent-secondary);
+  margin-right: var(--space-sm);
+}
+
+.text {
+  color: var(--text-primary);
+}
+
+.chat-input-row {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.chat-input-row input {
+  flex: 1;
+  padding: var(--space-md);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.chat-input-row button {
+  padding: var(--space-md) var(--space-xl);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.chat-input-row button:hover {
+  opacity: 0.9;
+}
+
+.side-panel {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  max-height: calc(100vh - 80px);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+}
+
+.tab-nav {
+  display: flex;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+}
+
 .tab-nav button {
   flex: 1;
-  padding: 8px;
+  padding: var(--space-sm) var(--space-md);
   border: none;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.3);
-  color: #aaa;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 13px;
+  transition: all var(--transition-fast);
 }
+
 .tab-nav button.active {
-  background: #e94560;
-  color: #fff;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  font-weight: 600;
 }
 
 .tab-content {
@@ -679,26 +825,123 @@ onUnmounted(() => {
 }
 
 .players-section, .actions-section, .accusation-section, .vote-section, .reveal-section {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
 }
-h2 { font-size: 14px; color: #aaa; margin-bottom: 12px; }
 
-.player-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
-.role-tag { font-size: 12px; color: #e94560; }
-.admin-tag { font-size: 12px; color: #f39c12; font-weight: bold; }
+.players-section h2, .actions-section h2 {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-md);
+}
 
-.actions-section button { width: 100%; padding: 10px; margin-bottom: 8px; border: none; border-radius: 6px; background: #0f3460; color: #eee; cursor: pointer; }
-.actions-section button:disabled { opacity: 0.5; cursor: not-allowed; }
+.player-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-light);
+}
 
-.accusation-section select, .vote-section select { width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #444; border-radius: 6px; background: rgba(0, 0, 0, 0.3); color: #eee; }
-.accusation-section textarea, .vote-section textarea { width: 100%; height: 80px; padding: 8px; margin-bottom: 8px; border: 1px solid #444; border-radius: 6px; background: rgba(0, 0, 0, 0.3); color: #eee; resize: vertical; }
-.accusation-section button, .vote-section button { width: 100%; padding: 10px; border: none; border-radius: 6px; background: #e94560; color: #fff; cursor: pointer; }
-.cancel-btn { background: #333 !important; margin-top: 8px; }
-.accusation-buttons { display: flex; flex-direction: column; }
+.role-tag {
+  font-size: 12px;
+  color: var(--accent-secondary);
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(210, 168, 255, 0.1);
+  border-radius: var(--radius-sm);
+}
 
-.reveal-section p { line-height: 1.8; color: #ddd; white-space: pre-wrap; }
-.back-btn { padding: 10px 24px; border: none; border-radius: 6px; background: #0f3460; color: #eee; cursor: pointer; margin-top: 12px; }
+.admin-tag {
+  font-size: 12px;
+  color: #f39c12;
+  font-weight: bold;
+}
+
+.actions-section button {
+  width: 100%;
+  padding: var(--space-md);
+  margin-bottom: var(--space-sm);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.actions-section button:hover:not(:disabled) {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+}
+
+.actions-section button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.accusation-section select, .vote-section select {
+  width: 100%;
+  padding: var(--space-md);
+  margin-bottom: var(--space-sm);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.accusation-section textarea, .vote-section textarea {
+  width: 100%;
+  height: 80px;
+  padding: var(--space-md);
+  margin-bottom: var(--space-sm);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  resize: vertical;
+}
+
+.accusation-section button, .vote-section button {
+  width: 100%;
+  padding: var(--space-md);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.cancel-btn {
+  background: var(--bg-primary) !important;
+  margin-top: var(--space-sm);
+}
+
+.accusation-buttons {
+  display: flex;
+  flex-direction: column;
+}
+
+.reveal-section p {
+  line-height: 1.8;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.back-btn {
+  padding: var(--space-md) var(--space-xl);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  margin-top: var(--space-md);
+}
+
+.back-btn:hover {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+}
 </style>
