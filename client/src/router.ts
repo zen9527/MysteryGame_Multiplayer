@@ -16,6 +16,7 @@ const routes = [
   { path: '/scripts', component: ScriptsPage },
   { path: '/scripts/generate', component: () => import('./components/scripts/ScriptGenerateWizard.vue') },
   { path: '/scripts/edit/:id', component: () => import('./components/scripts/ScriptEditor.vue'), meta: { placeholder: true } },
+  { path: '/settings', component: () => import('./components/LLMConfigPage.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 

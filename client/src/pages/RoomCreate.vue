@@ -56,7 +56,7 @@ function createRoom() {
 
 .room-create {
   max-width: 600px;
-  margin: 40px auto;
+  margin: 40px 40px 40px 120px; /* top right bottom left - 120px left margin clears 80px sidebar */
   padding: var(--space-2xl);
 }
 

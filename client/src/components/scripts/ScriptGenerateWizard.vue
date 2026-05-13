@@ -109,9 +109,9 @@
             <div v-if="store.generatedScript?.roles" class="roles-preview">
               <h4>角色列表</h4>
               <ul>
-                <li v-for="role in store.generatedScript.roles.slice(0, 5)" :key="role.id">
-                  {{ role.name }} - {{ role.gender || '未知' }}
-                </li>
+<li v-for="role in store.generatedScript.roles.slice(0, 5)" :key="role.id">
+                   {{ role.name }} - {{ role.occupation }}
+                 </li>
               </ul>
             </div>
           </div>
