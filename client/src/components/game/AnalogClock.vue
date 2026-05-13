@@ -26,7 +26,7 @@ const minuteDeg = ref(0);
 const secondDeg = ref(0);
 const digitalTime = ref('');
 
-let timer: ReturnType<typeof setInterval> | null = null;
+let timer: number | null = null; // Windows: setInterval returns number
 
 function updateClock() {
   const now = new Date();
