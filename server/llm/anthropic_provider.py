@@ -115,8 +115,10 @@ class AnthropicProvider(LLMProvider):
         )
 
     def get_config(self) -> dict:
-        base = super().get_config()
-        base["endpoint"] = self.endpoint
-        base["api_key_set"] = bool(self.api_key)
-        base["api_key_masked"] = mask_api_key(self.api_key)
-        return base
+        return {
+            "endpoint": self.endpoint,
+            "model": self.model,
+            "api_key": self.api_key,
+            "name": self.name,
+            "type": self.provider_type,
+        }
