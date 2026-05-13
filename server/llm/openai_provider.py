@@ -33,15 +33,15 @@ class OpenAIProvider(LLMProvider):
 
     def _get_chat_url(self) -> str:
         """Get chat completion URL, handling different endpoint formats."""
-        # If endpoint already contains /v1 or /v4, use it as-is
-        if "/v1/" in self.endpoint or "/v4/" in self.endpoint:
+        # If endpoint already contains /v1 or /v4 (with or without trailing slash), append /chat/completions
+        if "/v1" in self.endpoint or "/v4" in self.endpoint:
             return f"{self.endpoint}/chat/completions"
         # Otherwise, add /v1 prefix (standard OpenAI format)
         return f"{self.endpoint}/v1/chat/completions"
 
     def _get_models_url(self) -> str:
         """Get models URL, handling different endpoint formats."""
-        if "/v1/" in self.endpoint or "/v4/" in self.endpoint:
+        if "/v1" in self.endpoint or "/v4" in self.endpoint:
             return f"{self.endpoint}/models"
         return f"{self.endpoint}/v1/models"
 
