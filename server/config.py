@@ -7,7 +7,7 @@ load_dotenv(os.path.join(project_root, ".env"))
 
 class Config:
     LLM_ENDPOINT: str = os.getenv("LLM_ENDPOINT", "http://127.0.0.1:12340")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "qwen/qwen3.6-27b")
+    LLM_MODEL: str | None = os.getenv("LLM_MODEL") or None  # Optional - fetch from API if not set
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
     SERVER_HOST: str = os.getenv("SERVER_HOST", "0.0.0.0")
     SERVER_PORT: int = int(os.getenv("SERVER_PORT", "8000"))
