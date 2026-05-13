@@ -134,16 +134,40 @@
             </div>
 
             <!-- Admin Panel -->
-            <AdminPanel
-              v-if="isAdmin && activeTab === 'action'"
-              :loading="adminLoading"
-              :dm-log="dmLog"
-              @push-event="handlePushEvent"
-              @advance-act="handleAdvanceAct"
-              @force-trial="handleForceTrial"
-              @end-game="handleEndGame"
-              @add-clue="handleAddClue"
-            />
+            <div v-if="isAdmin && activeTab === 'action'" class="admin-panel">
+              <h3>🛠️ 管理员控制台</h3>
+
+              <div class="admin-actions">
+                <button @click="handlePushEvent" :disabled="adminLoading" class="action-btn advance">
+                  ⏭️ {{ adminLoading ? '生成中...' : '推进剧情' }}
+                </button>
+                <button @click="handleAdvanceAct" :disabled="adminLoading" class="action-btn next-act">
+                  📖 {{ adminLoading ? '处理中...' : '推进下一幕' }}
+                </button>
+                <button @click="showClueInput = true" :disabled="adminLoading" class="action-btn clue">🔍 追加线索</button>
+                <button @click="handleForceTrial" :disabled="adminLoading" class="action-btn trial">⚖️ 强制审判</button>
+                <button @click="handleEndGame" :disabled="adminLoading" class="action-btn end">🛑 提前结束</button>
+              </div>
+
+              <!-- Clue input modal -->
+              <div v-if="showClueInput" class="clue-modal">
+                <h4>追加线索</h4>
+                <input v-model="clueTitle" placeholder="线索标题" />
+                <textarea v-model="clueContent" placeholder="线索内容..." rows="3"></textarea>
+                <div class="modal-actions">
+                  <button @click="submitClue" :disabled="!clueTitle || !clueContent" class="confirm-btn">发布</button>
+                  <button @click="showClueInput = false" class="cancel-btn">取消</button>
+                </div>
+              </div>
+
+              <!-- DM Log toggle -->
+              <details v-if="dmLog.length > 0">
+                <summary>📋 DM 日志 ({{ dmLog.length }}条)</summary>
+                <div class="dm-log">
+                  <div v-for="(log, i) in dmLog" :key="i" class="log-entry">{{ log }}</div>
+                </div>
+              </details>
+            </div>
           </div>
         </div>
       </aside>
@@ -164,7 +188,6 @@ import {
 } from '../constants';
 import type { WSMessage, ClientMessage } from '../types/ws';
 import GameTimer from './GameTimer.vue';
-import AdminPanel from './AdminPanel.vue';
 import RoleCard from './RoleCard.vue';
 import PrivateChatPanel from './PrivateChatPanel.vue';
 import ClueCardPanel from './ClueCardPanel.vue';
@@ -172,6 +195,19 @@ import ClueCardPanel from './ClueCardPanel.vue';
 const route = useRoute();
 const gameId = route.params.gameId as string;
 const playerId = localStorage.getItem(`player_${gameId}`) || localStorage.getItem(`admin_${gameId}`) || localStorage.getItem('player_id') || '';
+
+// Admin panel state
+const showClueInput = ref(false);
+const clueTitle = ref('');
+const clueContent = ref('');
+
+function submitClue() {
+  if (!clueTitle.value || !clueContent.value) return;
+  handleAddClue({ title: clueTitle.value, content: clueContent.value });
+  showClueInput.value = false;
+  clueTitle.value = '';
+  clueContent.value = '';
+}
 
 const store = useGameStore();
 const { phase, act, currentEvent, activeTab, players: storePlayers, publicMessages, actBanner } = storeToRefs(store);

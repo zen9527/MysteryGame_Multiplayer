@@ -86,14 +86,12 @@ client/src/
 │   ├── RoomCreate.vue         Room creation with script selection
 │   ├── RoomJoin.vue           Join room form
 │   ├── WaitingLobby.vue       Pre-game lobby (LLM config, script gen, player list)
-│   ├── AdminPanel.vue         Admin controls (push event, advance act, etc.)
-│   ├── ScriptEditor.vue       Script editing/preview
+│   ├── GamePage.vue           Main game page (WebSocket + store)
 │   ├── RoleCard.vue           Role card display (3 layers)
 │   ├── ClueCardPanel.vue      Clue panel
 │   ├── PrivateChatPanel.vue   DM private chat (SSE streaming)
 │   ├── GameTimer.vue          Game timer countdown
-│   ├── game/                  (Unused scaffold components)
-│   └── admin/                 (Unused scaffold components)
+│   └── common/                Reusable UI components (CollapsibleSidebar)
 ├── pages/
 │   └── RoomCreate.vue         Room creation page
 ├── composables/
@@ -101,14 +99,12 @@ client/src/
 ├── stores/
 │   └── game.ts                Pinia store (all game state + WS message handler)
 ├── utils/
-│   ├── ws.ts                  WebSocketManager (unused — GamePage uses native WS)
 │   ├── sse.ts                 SSE stream consumer utility
-│   └── schema-validation.ts   Zod validation (unused)
 ├── types/
 │   ├── ws.ts                  TypeScript WS message types
 │   └── script.ts              Script metadata types
 ├── constants.ts               Frontend constants (timeouts, intervals)
-└── router.ts                  Vue Router (4 routes)
+└── router.ts                  Vue Router (5 routes)
 ```
 
 ### State Management

@@ -91,13 +91,22 @@
         <div v-if="generating && genStatus" class="gen-status">{{ genStatus }}</div>
       </div>
 
-      <!-- Script Preview/Editor -->
-      <ScriptEditor
-        v-if="generatedScript"
-        :script="generatedScript"
-        @confirm="confirmScript"
-        @regenerate="generateScript"
-      />
+      <!-- Script Preview -->
+      <div v-if="generatedScript" class="script-preview">
+        <h3>📖 剧本预览</h3>
+        <div class="script-header">
+          <h2>{{ generatedScript.title }}</h2>
+          <span class="genre-tag">{{ generatedScript.genre }}</span>
+          <span class="difficulty-tag">{{ generatedScript.difficulty || '中等' }}</span>
+        </div>
+        <p class="script-info">角色数：{{ generatedScript.roles?.length || 0 }}人 | 线索数：{{ generatedScript.clues?.length || 0 }}条</p>
+        <div class="script-actions">
+          <button @click="confirmScript" :disabled="!canConfirmScript" class="confirm-btn">
+            ✅ 确认剧本，等待玩家加入
+          </button>
+          <button @click="generateScript" class="regen-btn">🔄 重新生成</button>
+        </div>
+      </div>
 
       <p v-if="genError" class="error">{{ genError }}</p>
     </div>
@@ -162,12 +171,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import ScriptEditor from './ScriptEditor.vue';
 
 const router = useRouter();
 const route = useRoute();
 const gameId = route.params.gameId as string;
 const adminId = localStorage.getItem(`admin_${gameId}`) || '';
+
+const canConfirmScript = computed(() => generatedScript.value && (generatedScript.value.roles?.length || 0) >= 2);
 
 // Admin state
 const isAdmin = ref(false);
