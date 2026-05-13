@@ -65,10 +65,12 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
     formData.value.playerCount = Math.max(3, Math.min(8, count));
   }
 
-  async function generateScript() {
+  async function generateScript(signal?: AbortSignal) {
     generating.value = true;
     generationStatus.value = '正在连接 LLM...';
     error.value = null;
+    
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     
     try {
       const response = await fetch(`${API_BASE}/generate`, {
@@ -79,15 +81,20 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
           difficulty: formData.value.difficulty,
           player_count: formData.value.playerCount,
         }),
+        signal,
       });
       
       if (!response.ok) {
-        throw new Error(`Generation failed: ${response.status}`);
+        error.value = `Generation failed: ${response.status}`;
+        generationStatus.value = '生成失败';
+        return;
       }
       
-      const reader = response.body?.getReader();
+      reader = response.body?.getReader() ?? null;
       if (!reader) {
-        throw new Error('ReadableStream not supported');
+        error.value = 'ReadableStream not supported';
+        generationStatus.value = '生成失败';
+        return;
       }
       
       const decoder = new TextDecoder();
@@ -102,19 +109,38 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
         generationStatus.value = '正在生成剧本...';
       }
       
-      // Parse final JSON from SSE data
-      const jsonMatch = accumulated.match(/data:\s*(\{.*\})/s);
-      if (jsonMatch && jsonMatch[1]) {
-        generatedScript.value = JSON.parse(jsonMatch[1]);
-      } else {
-        throw new Error('Failed to parse generated script');
+      // Parse SSE data line-by-line
+      const events = accumulated.split('\n\n');
+      let lastDataChunk = '';
+      
+      for (const event of events) {
+        if (event.startsWith('data:')) {
+          lastDataChunk = event.slice(5).trim();
+        }
+      }
+      
+      if (!lastDataChunk) {
+        error.value = 'No valid data chunk found in SSE response';
+        generationStatus.value = '生成失败';
+        return;
+      }
+      
+      try {
+        generatedScript.value = JSON.parse(lastDataChunk);
+      } catch (parseError) {
+        error.value = `Failed to parse generated script: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`;
+        generationStatus.value = '生成失败';
+        return;
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : '未知错误';
       generationStatus.value = '生成失败';
-      throw err;
+      // Don't re-throw - handle error internally
     } finally {
       generating.value = false;
+      if (reader) {
+        await reader.cancel();
+      }
     }
   }
 

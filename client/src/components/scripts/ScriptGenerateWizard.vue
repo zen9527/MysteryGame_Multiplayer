@@ -80,7 +80,7 @@
               {{ store.generatedScript.player_count }}人
             </p>
             <p v-if="store.generatedScript.background_story" class="preview-text">
-              {{ store.generatedScript.background_story.slice(0, 200) }}...
+              {{ store.generatedScript.background_story?.slice(0, 200) }}...
             </p>
           </div>
         </div>
@@ -126,11 +126,10 @@ async function handleNext() {
   if (!store.canProceed) return;
   
   if (store.currentStep === 3) {
-    try {
-      await store.generateScript();
-    } catch (error) {
-      // Error already set in store, don't proceed
-      return;
+    await store.generateScript();
+    // Check if generation succeeded before proceeding
+    if (!store.generatedScript) {
+      return; // Stay on step 4 to show error
     }
   }
   

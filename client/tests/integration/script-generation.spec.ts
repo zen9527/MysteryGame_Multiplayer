@@ -21,6 +21,7 @@ describe('ScriptGenerator - SSE Generation', () => {
       read: vi.fn()
         .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(mockSSEData) })
         .mockResolvedValueOnce({ done: true, value: undefined }),
+      cancel: vi.fn().mockResolvedValue(undefined),
     };
     
     global.fetch = vi.fn().mockResolvedValue({
@@ -62,7 +63,7 @@ describe('ScriptGenerator - SSE Generation', () => {
     expect(store.error).toBeNull();
   });
 
-  it('handles generation error and sets error state', async () => {
+  it('handles generation error and sets error state without throwing', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
@@ -75,19 +76,10 @@ describe('ScriptGenerator - SSE Generation', () => {
     store.selectDifficulty('中等');
     store.setPlayerCount(4);
     
-    // Call generateScript - it should throw but also set error state
-    let thrownError: Error | null = null;
-    try {
-      await store.generateScript();
-    } catch (err) {
-      thrownError = err instanceof Error ? err : new Error(String(err));
-    }
+    // Call generateScript - it should handle error internally without throwing
+    await store.generateScript();
     
-    // Verify error was thrown
-    expect(thrownError).toBeTruthy();
-    expect(thrownError?.message).toContain('Generation failed');
-    
-    // Verify error state
+    // Verify error was NOT thrown (handled internally)
     expect(store.error).toContain('Generation failed');
     expect(store.generating).toBe(false);
     expect(store.generatedScript).toBeNull();
@@ -103,6 +95,7 @@ describe('ScriptGenerator - SSE Generation', () => {
           read: vi.fn()
             .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(mockSSEData) })
             .mockResolvedValueOnce({ done: true, value: undefined }),
+          cancel: vi.fn().mockResolvedValue(undefined),
         }),
       },
     });
@@ -135,6 +128,7 @@ describe('ScriptGenerator - SSE Generation', () => {
             read: vi.fn()
               .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode('data: {"title":"Retry Success"}\n\n') })
               .mockResolvedValueOnce({ done: true, value: undefined }),
+            cancel: vi.fn().mockResolvedValue(undefined),
           }),
         },
       });
