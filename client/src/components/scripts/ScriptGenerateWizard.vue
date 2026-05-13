@@ -92,9 +92,39 @@
         </div>
       </div>
 
-      <!-- Step 5: Confirmation Placeholder -->
+      <!-- Step 5: Confirmation -->
       <div v-if="store.currentStep === 5" class="step-content">
-        <p>确认功能待实现...</p>
+        <h2>确认剧本</h2>
+        <div class="final-preview">
+          <div class="script-card">
+            <h3>{{ store.generatedScript?.title }}</h3>
+            <div class="meta">
+              <span>{{ store.generatedScript?.genre }}</span>
+              <span>{{ store.generatedScript?.difficulty }}</span>
+              <span>{{ store.generatedScript?.player_count }}人</span>
+            </div>
+            <p v-if="store.generatedScript?.background_story" class="description">
+              {{ store.generatedScript.background_story.slice(0, 300) }}...
+            </p>
+            <div v-if="store.generatedScript?.roles" class="roles-preview">
+              <h4>角色列表</h4>
+              <ul>
+                <li v-for="role in store.generatedScript.roles.slice(0, 5)" :key="role.id">
+                  {{ role.name }} - {{ role.gender || '未知' }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        
+        <div class="wizard-actions">
+          <button @click="confirmScript" class="confirm-btn">
+            ✅ 确认并保存
+          </button>
+          <button @click="regenerate" class="regen-btn">
+            🔄 重新生成
+          </button>
+        </div>
       </div>
     </div>
 
@@ -114,8 +144,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useScriptGeneratorStore } from '@/stores/scriptGenerator';
+import { useRouter } from 'vue-router';
 
 const store = useScriptGeneratorStore();
+const router = useRouter();
 const playerCountInput = ref(store.formData.playerCount);
 
 function updatePlayerCount() {
@@ -138,6 +170,18 @@ async function handleNext() {
 
 function retryGeneration() {
   store.generateScript();
+}
+
+async function confirmScript() {
+  if (!store.generatedScript) return;
+  
+  // TODO: Save script to backend (if needed)
+  // For now, just redirect to scripts list
+  router.push('/scripts');
+}
+
+function regenerate() {
+  store.reset();
 }
 </script>
 
@@ -440,5 +484,103 @@ function retryGeneration() {
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 600;
+}
+
+/* Step 5 - Final Preview */
+.final-preview {
+  margin-bottom: var(--space-xl);
+}
+
+.script-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl);
+}
+
+.script-card h3 {
+  font-size: 28px;
+  color: var(--accent-primary);
+  margin-bottom: var(--space-md);
+}
+
+.script-card .meta {
+  display: flex;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.script-card .meta span {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.script-card .description {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin-bottom: var(--space-lg);
+}
+
+.roles-preview h4 {
+  font-size: 18px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-md);
+}
+
+.roles-preview ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.roles-preview li {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* Wizard Actions */
+.wizard-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-lg);
+  margin-top: var(--space-xl);
+}
+
+.confirm-btn, .regen-btn {
+  padding: var(--space-lg) var(--space-2xl);
+  font-size: 18px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.confirm-btn {
+  background: var(--success);
+  border: 2px solid var(--success);
+  color: var(--bg-primary);
+}
+
+.confirm-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
+
+.regen-btn {
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-medium);
+  color: var(--text-primary);
+}
+
+.regen-btn:hover {
+  background: var(--hover-bg);
 }
 </style>

@@ -1,19 +1,32 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createTestingPinia } from '@pinia/testing';
+import { createRouter, createWebHistory } from 'vue-router';
 import { useScriptGeneratorStore } from '@/stores/scriptGenerator';
 import ScriptGenerateWizard from '@/components/scripts/ScriptGenerateWizard.vue';
 
+// Create a mock router for tests
+const createMockRouter = () => {
+  return createRouter({
+    history: createWebHistory(),
+    routes: [{ path: '/scripts', component: { template: '<div>Scripts</div>' } }],
+  });
+};
+
 describe('ScriptGenerateWizard', () => {
-  const mountComponent = () => {
+  const mountComponent = (options?: { mocks?: Record<string, unknown> }) => {
+    const router = createMockRouter();
+    
     return mount(ScriptGenerateWizard, {
       global: {
         plugins: [
           createTestingPinia({
             stubActions: false,
           }),
+          router,
         ],
         stubs: { 'router-link': true },
+        ...(options?.mocks ? { mocks: options.mocks } : {}),
       },
     });
   };
@@ -310,6 +323,141 @@ describe('ScriptGenerateWizard', () => {
       expect(wrapper.find('.preview-panel').exists()).toBe(true);
       expect(wrapper.text()).toContain('Test Script');
       expect(wrapper.text()).toContain('生成结果预览');
+    });
+  });
+
+  describe('Step 5 - Confirm Step', () => {
+    it('shows confirm button on step 5', async () => {
+      const wrapper = mountComponent();
+      const store = useScriptGeneratorStore();
+      
+      // Set up step 5 with generated script
+      store.selectGenre('悬疑推理');
+      store.selectDifficulty('中等');
+      store.currentStep = 5;
+      store.generatedScript = {
+        id: 'test-123',
+        title: 'Test Script',
+        genre: '悬疑推理',
+        difficulty: '中等',
+        player_count: 5,
+        background_story: 'This is a test background story for the script.',
+        roles: [
+          { id: '1', name: '角色 A', age: 25, occupation: '医生', description: '', background: '', secret_task: '', alibi: '', motive: '', relationships: [] },
+          { id: '2', name: '角色 B', age: 30, occupation: '律师', description: '', background: '', secret_task: '', alibi: '', motive: '', relationships: [] },
+        ],
+      } as any;
+      await wrapper.vm.$nextTick();
+      
+      expect(wrapper.text()).toContain('确认剧本');
+      expect(wrapper.find('.confirm-btn').exists()).toBe(true);
+      expect(wrapper.find('.confirm-btn').text()).toContain('确认并保存');
+      expect(wrapper.find('.regen-btn').text()).toContain('重新生成');
+    });
+
+    it('shows script preview with title, meta, and description on step 5', async () => {
+      const wrapper = mountComponent();
+      const store = useScriptGeneratorStore();
+      
+      // Set up step 5 with generated script
+      store.currentStep = 5;
+      store.generatedScript = {
+        id: 'test-123',
+        title: '谋杀之谜',
+        genre: '悬疑推理',
+        difficulty: '困难',
+        player_count: 6,
+        background_story: '这是一个关于谋杀的神秘故事。在一个雨夜，富豪王老爷在他的庄园里被发现死亡...',
+        roles: [
+          { id: '1', name: '林默', age: 28, occupation: '记者', description: '', background: '', secret_task: '', alibi: '', motive: '', relationships: [] },
+          { id: '2', name: '张华', age: 35, occupation: '商人', description: '', background: '', secret_task: '', alibi: '', motive: '', relationships: [] },
+        ],
+      } as any;
+      await wrapper.vm.$nextTick();
+      
+      expect(wrapper.find('.script-card').exists()).toBe(true);
+      expect(wrapper.text()).toContain('谋杀之谜');
+      expect(wrapper.text()).toContain('悬疑推理');
+      expect(wrapper.text()).toContain('困难');
+      expect(wrapper.text()).toMatch(/6.*人/);
+      expect(wrapper.text()).toContain('这是一个关于谋杀的神秘故事');
+    });
+
+    it('shows roles preview on step 5', async () => {
+      const wrapper = mountComponent();
+      const store = useScriptGeneratorStore();
+      
+      // Set up step 5 with generated script with roles
+      store.currentStep = 5;
+      store.generatedScript = {
+        id: 'test-123',
+        title: 'Test Script',
+        genre: '悬疑推理',
+        difficulty: '中等',
+        player_count: 4,
+        background_story: 'Test story.',
+        roles: [
+          { id: '1', name: '角色 A', age: 25, occupation: '医生', description: '', background: '', secret_task: '', alibi: '', motive: '', relationships: [] },
+          { id: '2', name: '角色 B', age: 30, occupation: '律师', description: '', background: '', secret_task: '', alibi: '', motive: '', relationships: [] },
+          { id: '3', name: '角色 C', age: 28, occupation: '教师', description: '', background: '', secret_task: '', alibi: '', motive: '', relationships: [] },
+        ],
+      } as any;
+      await wrapper.vm.$nextTick();
+      
+      expect(wrapper.text()).toContain('角色列表');
+      expect(wrapper.text()).toContain('角色 A');
+      expect(wrapper.text()).toContain('角色 B');
+    });
+
+    it('redirects to scripts list after confirm', async () => {
+      const router = createMockRouter();
+      const pushSpy = vi.spyOn(router, 'push');
+      
+      const wrapper = mount(ScriptGenerateWizard, {
+        global: {
+          plugins: [
+            createTestingPinia({
+              stubActions: false,
+            }),
+            router,
+          ],
+          stubs: { 'router-link': true },
+        },
+      });
+      
+      const store = useScriptGeneratorStore();
+      store.currentStep = 5;
+      store.generatedScript = {
+        id: 'test-123',
+        title: 'Test Script',
+        genre: '悬疑推理',
+        difficulty: '中等',
+        player_count: 4,
+        background_story: 'Test story.',
+        roles: [],
+      } as any;
+      await wrapper.vm.$nextTick();
+      
+      const confirmBtn = wrapper.find('.confirm-btn');
+      await confirmBtn.trigger('click');
+      
+      expect(pushSpy).toHaveBeenCalledWith('/scripts');
+    });
+
+    it('resets wizard on regenerate', async () => {
+      const wrapper = mountComponent();
+      const store = useScriptGeneratorStore();
+      
+      // Set up step 5 with data
+      store.currentStep = 5;
+      store.generatedScript = { id: 'test-123', title: 'Test' } as any;
+      await wrapper.vm.$nextTick();
+      
+      const regenBtn = wrapper.find('.regen-btn');
+      await regenBtn.trigger('click');
+      
+      expect(store.currentStep).toBe(1);
+      expect(store.generatedScript).toBeNull();
     });
   });
 });
