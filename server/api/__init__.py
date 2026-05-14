@@ -7,6 +7,7 @@ from server.api.voting import router as voting_router
 from server.api.chat import router as chat_router
 from server.api.llm import router as llm_router
 from server.api.scripts import router as scripts_router
+from server.api.health import router as health_router
 
 router = APIRouter()
 
@@ -19,3 +20,4 @@ router.include_router(voting_router)
 router.include_router(chat_router)
 router.include_router(llm_router)
 router.include_router(scripts_router)
+router.include_router(health_router)

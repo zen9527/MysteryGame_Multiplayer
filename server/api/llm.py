@@ -124,8 +124,3 @@ async def proxy_fetch_models():
 @router.get("/llm-config")
 async def get_llm_config():
     return _get_registry().get_active().get_config()
-
-
-@router.get("/health")
-async def health_check():
-    return {"status": "ok"}

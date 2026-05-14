@@ -10,7 +10,12 @@ def test_health_check():
     resp = client.get("/api/health")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "ok"
+    assert "status" in data
+    assert "checks" in data
+    assert data["status"] in ["healthy", "unhealthy"]
+    assert "llm" in data["checks"]
+    assert "game_manager" in data["checks"]
+    assert "database" in data["checks"]
 
 
 def test_get_llm_config():
@@ -95,4 +100,6 @@ def test_health_reflects_games_count():
     assert resp.status_code == 200
     resp = client.get("/api/health")
     data = resp.json()
-    assert data["status"] == "ok"
+    assert "checks" in data
+    assert "game_manager" in data["checks"]
+    assert data["checks"]["game_manager"]["active_games"] >= 1
