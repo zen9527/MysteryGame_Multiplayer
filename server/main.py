@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from server.websocket_hub import router as ws_router
 from server.api import router as api_router
-from server.middleware import CORSMiddleware
+from server.middleware import CORSMiddleware, ValidateRequestMiddleware
 from server.di import register_services, container
 import asyncio
 
@@ -37,6 +37,7 @@ async def lifespan(app):
 app = FastAPI(title="剧本杀服务器", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(CORSMiddleware)
+app.add_middleware(ValidateRequestMiddleware)
 app.include_router(ws_router)
 app.include_router(api_router, prefix="/api")
 
