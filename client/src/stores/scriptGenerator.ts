@@ -32,7 +32,7 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
   const canProceed = computed(() => {
     if (currentStep.value === 1) return formData.value.genre !== '';
     if (currentStep.value === 2) return formData.value.difficulty !== '';
-    if (currentStep.value === 3) return generatedScript.value !== null; // Can proceed only after generation succeeds
+    if (currentStep.value === 3) return true; // Step 3: always allow clicking to trigger generation
     if (currentStep.value === 4) return generatedScript.value !== null;
     return false;
   });

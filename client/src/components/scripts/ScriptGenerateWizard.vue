@@ -153,7 +153,7 @@
         @click="handleNext" 
         :disabled="!store.canProceed || store.generating"
       >
-        {{ store.generating ? '生成中...' : (store.currentStep === 3 && !store.generatedScript ? '生成剧本 →' : '下一步 →') }}
+        {{ getButtonText() }}
       </button>
     </div>
 
@@ -175,6 +175,16 @@ const playerCountInput = ref(store.formData.playerCount);
 
 function updatePlayerCount() {
   store.setPlayerCount(playerCountInput.value);
+}
+
+function getButtonText(): string {
+  if (store.generating) return '生成中...';
+  if (store.currentStep === 3) {
+    if (store.error) return '🔄 重试生成';
+    if (store.generatedScript) return '下一步 →';
+    return '生成剧本 →';
+  }
+  return '下一步 →';
 }
 
 async function handleNext() {
