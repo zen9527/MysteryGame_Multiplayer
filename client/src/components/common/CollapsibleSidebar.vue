@@ -35,7 +35,7 @@ const isExpanded = ref(false);
 // Watch sidebar state and update CSS variable on body
 watch(isExpanded, (expanded) => {
   document.body.style.setProperty('--sidebar-expanded', expanded ? '1' : '0');
-});
+}, { immediate: true });
 
 const navItems = [
   { path: '/', icon: '🏠', label: '房间列表' },

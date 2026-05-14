@@ -47,6 +47,11 @@ describe('ScriptGenerator Store', () => {
     
     store.nextStep();
     expect(store.currentStep).toBe(3);
+    // Step 3: requires generatedScript (not just form data)
+    expect(store.canProceed).toBe(false);
+    
+    // Simulate successful generation
+    store.generatedScript = { id: 'test', title: 'Test' } as any;
     expect(store.canProceed).toBe(true);
   });
 });

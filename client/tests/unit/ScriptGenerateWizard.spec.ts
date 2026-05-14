@@ -272,31 +272,33 @@ describe('ScriptGenerateWizard', () => {
   });
 
   describe('Step 4 Generation', () => {
-    it('shows generation loading state on step 4', async () => {
+    it('shows preview panel on step 4', async () => {
       const wrapper = mountComponent();
       const store = useScriptGeneratorStore();
       
-      // Set form data and directly set step to 4
+      // Set form data and directly set step to 4 with generated script
       store.selectGenre('悬疑推理');
       store.selectDifficulty('中等');
       store.currentStep = 4;
-      store.generating = true;
-      store.generationStatus = '正在连接 LLM...';
+      store.generatedScript = {
+        title: 'Test Script',
+        genre: '悬疑推理',
+      } as any;
       await wrapper.vm.$nextTick();
       
-      // Step 4 should show generation UI elements
-      expect(wrapper.text()).toContain('正在生成剧本');
-      expect(wrapper.find('.spinner').exists()).toBe(true);
-      expect(wrapper.text()).toContain('正在连接 LLM');
+      // Step 4 should show preview panel
+      expect(wrapper.find('.preview-panel').exists()).toBe(true);
+      expect(wrapper.text()).toContain('剧本预览');
     });
 
-    it('shows retry button when generation fails', async () => {
+    it('shows retry button in step 3 when generation fails', async () => {
       const wrapper = mountComponent();
       const store = useScriptGeneratorStore();
       
-      // Set form data and directly set step to 4 with error
+      // Set form data and directly set step to 3 with error
       store.selectGenre('悬疑推理');
-      store.currentStep = 4;
+      store.selectDifficulty('中等');
+      store.currentStep = 3;
       store.error = 'Generation failed';
       await wrapper.vm.$nextTick();
       
@@ -322,7 +324,7 @@ describe('ScriptGenerateWizard', () => {
       
       expect(wrapper.find('.preview-panel').exists()).toBe(true);
       expect(wrapper.text()).toContain('Test Script');
-      expect(wrapper.text()).toContain('生成结果预览');
+      expect(wrapper.text()).toContain('剧本预览');
     });
   });
 

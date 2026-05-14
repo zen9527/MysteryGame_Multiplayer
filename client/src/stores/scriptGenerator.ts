@@ -32,7 +32,7 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
   const canProceed = computed(() => {
     if (currentStep.value === 1) return formData.value.genre !== '';
     if (currentStep.value === 2) return formData.value.difficulty !== '';
-    if (currentStep.value === 3) return true;
+    if (currentStep.value === 3) return generatedScript.value !== null; // Can proceed only after generation succeeds
     if (currentStep.value === 4) return generatedScript.value !== null;
     return false;
   });
@@ -41,8 +41,8 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
     const labels: Record<number, string> = {
       1: '选择类型',
       2: '选择难度',
-      3: '设置人数',
-      4: '生成中',
+      3: '设置人数并生成',
+      4: '预览',
       5: '确认',
     };
     return labels[currentStep.value];

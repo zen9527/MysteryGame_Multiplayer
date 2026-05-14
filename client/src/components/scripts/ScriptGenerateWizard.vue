@@ -44,7 +44,7 @@
         </div>
       </div>
 
-      <!-- Step 3: Player Count -->
+      <!-- Step 3: Player Count + Generation -->
       <div v-if="store.currentStep === 3" class="step-content">
         <h2>玩家数量</h2>
         <div class="slider-container">
@@ -57,38 +57,56 @@
           />
           <div class="player-display">{{ store.formData.playerCount }} 人</div>
         </div>
-      </div>
-
-      <!-- Step 4: Generation -->
-      <div v-if="store.currentStep === 4" class="step-content">
-        <h2>正在生成剧本...</h2>
         
-        <!-- Loading State -->
-        <div v-if="store.generating" class="generation-status">
-          <div class="spinner"></div>
-          <p>{{ store.generationStatus }}</p>
-        </div>
-        
-        <!-- Success Preview -->
-        <div v-if="store.generatedScript" class="preview-panel">
-          <h3>生成结果预览</h3>
-          <div class="script-preview">
-            <h4>{{ store.generatedScript.title }}</h4>
-            <p class="meta">
-              {{ store.generatedScript.genre }} · 
-              {{ store.generatedScript.difficulty }} · 
-              {{ store.generatedScript.player_count }}人
-            </p>
-            <p v-if="store.generatedScript.background_story" class="preview-text">
-              {{ store.generatedScript.background_story?.slice(0, 200) }}...
-            </p>
+        <!-- Generation Section (shown after clicking "生成剧本") -->
+        <div v-if="store.generating || store.generatedScript || store.error" class="generation-section">
+          <h3>剧本生成</h3>
+          
+          <!-- Loading State -->
+          <div v-if="store.generating" class="generation-status">
+            <div class="spinner"></div>
+            <p>{{ store.generationStatus }}</p>
+          </div>
+          
+          <!-- Success Preview -->
+          <div v-if="store.generatedScript && !store.error" class="preview-panel">
+            <h4>生成结果预览</h4>
+            <div class="script-preview">
+              <h5>{{ store.generatedScript.title }}</h5>
+              <p class="meta">
+                {{ store.generatedScript.genre }} · 
+                {{ store.generatedScript.difficulty }} · 
+                {{ store.generatedScript.player_count }}人
+              </p>
+              <p v-if="store.generatedScript.background_story" class="preview-text">
+                {{ store.generatedScript.background_story?.slice(0, 200) }}...
+              </p>
+            </div>
+          </div>
+          
+          <!-- Error State -->
+          <div v-if="store.error" class="error-message">
+            ⚠️ {{ store.error }}
+            <button @click="retryGeneration" class="retry-btn">重试生成</button>
           </div>
         </div>
-        
-        <!-- Error State -->
-        <div v-if="store.error" class="error-message">
-          ⚠️ {{ store.error }}
-          <button @click="retryGeneration" class="retry-btn">重试</button>
+      </div>
+
+      <!-- Step 4: Preview -->
+      <div v-if="store.currentStep === 4" class="step-content">
+        <h2>剧本预览</h2>
+        <div class="preview-panel">
+          <div class="script-preview">
+            <h3>{{ store.generatedScript?.title }}</h3>
+            <p class="meta">
+              {{ store.generatedScript?.genre }} · 
+              {{ store.generatedScript?.difficulty }} · 
+              {{ store.generatedScript?.player_count }}人
+            </p>
+            <p v-if="store.generatedScript?.background_story" class="preview-text">
+              {{ store.generatedScript.background_story?.slice(0, 400) }}...
+            </p>
+          </div>
         </div>
       </div>
 
@@ -109,9 +127,9 @@
             <div v-if="store.generatedScript?.roles" class="roles-preview">
               <h4>角色列表</h4>
               <ul>
-<li v-for="role in store.generatedScript.roles.slice(0, 5)" :key="role.id">
-                   {{ role.name }} - {{ role.occupation }}
-                 </li>
+                <li v-for="(role, index) in store.generatedScript.roles.slice(0, 5)" :key="index">
+                  {{ role.name }} - {{ role.occupation }}
+                </li>
               </ul>
             </div>
           </div>
@@ -131,7 +149,12 @@
     <!-- Navigation -->
     <div class="wizard-nav" v-if="store.currentStep < 5">
       <button @click="store.prevStep" :disabled="store.currentStep === 1">← 上一步</button>
-      <button @click="handleNext" :disabled="!store.canProceed">下一步 →</button>
+      <button 
+        @click="handleNext" 
+        :disabled="!store.canProceed || store.generating"
+      >
+        {{ store.generating ? '生成中...' : (store.currentStep === 3 && !store.generatedScript ? '生成剧本 →' : '下一步 →') }}
+      </button>
     </div>
 
     <!-- Cancel Button -->
@@ -157,23 +180,23 @@ function updatePlayerCount() {
 async function handleNext() {
   if (!store.canProceed) return;
   
-  if (store.currentStep === 3) {
-    // Step 3: Generate script before moving to step 4
+  if (store.currentStep === 3 && !store.generatedScript) {
+    // Step 3: First time clicking "下一步" - start generation
     await store.generateScript();
     
     // Check if generation succeeded
-    if (store.error) {
+    if (store.error || !store.generatedScript) {
       console.error('Script generation failed:', store.error);
-      return; // Stay on step 3 to show error and allow retry
-    }
-    
-    if (!store.generatedScript) {
-      console.error('Script generation completed but no script returned');
+      // Stay on step 3, don't proceed
       return;
     }
+    
+    // Generation succeeded, move to step 4 (preview)
+    store.nextStep();
+  } else {
+    // Other steps: just proceed
+    store.nextStep();
   }
-  
-  store.nextStep();
 }
 
 function retryGeneration() {
