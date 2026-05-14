@@ -77,7 +77,7 @@ class OpenAIProvider(LLMProvider):
         raise ValueError(f"LLM request failed after {MAX_RETRIES + 1} attempts: {last_exc}") from last_exc
 
     def chat_stream(self, messages: list[dict], temperature: float = 0.7) -> Generator[str, None, None]:
-        url = f"{self.endpoint}/v1/chat/completions"
+        url = self._get_chat_url()
         payload = {"model": self.model, "messages": messages, "temperature": temperature, "stream": True}
         resp = requests.post(url, headers=self._headers(), json=payload, timeout=30, stream=True)
         resp.raise_for_status()
