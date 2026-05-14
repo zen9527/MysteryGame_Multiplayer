@@ -60,7 +60,7 @@ def _generate_script_generator(game_id: str, req: ScriptGenerationRequest):
         _get_manager().set_script(game_id, script)
         state.script_generated = True
 
-        yield f"data: {{\"type\": \"done\", \"title\": {json.dumps(script.title, ensure_ascii=False)}, \"roles_count\": {len(script.roles)}, \"clues_count\": {len(script.clues)}}}\n\n"
+        yield f"data: {{\"type\": \"done\", \"data\": {json.dumps(script.model_dump(), ensure_ascii=False)}, \"title\": {json.dumps(script.title, ensure_ascii=False)}, \"roles_count\": {len(script.roles)}, \"clues_count\": {len(script.clues)}}}\n\n"
     except Exception as e:
         yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
 

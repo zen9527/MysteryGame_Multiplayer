@@ -47,6 +47,7 @@ describe('ScriptGenerator - SSE Generation', () => {
         genre: '悬疑推理',
         difficulty: '中等',
         player_count: 5,
+        estimated_time: 90, // Added default value
       }),
     });
     

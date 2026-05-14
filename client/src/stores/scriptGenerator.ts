@@ -80,6 +80,7 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
           genre: formData.value.genre,
           difficulty: formData.value.difficulty,
           player_count: formData.value.playerCount,
+          estimated_time: 90, // Default value
         }),
         signal,
       });

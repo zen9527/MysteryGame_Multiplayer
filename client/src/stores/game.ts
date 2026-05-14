@@ -203,12 +203,7 @@ export const useGameStore = defineStore('game', () => {
 
   // Script selection actions
   async function fetchScripts(filters?: ScriptFilters) {
-    try {
-      availableScripts.value = await scriptApi.listScripts(filters);
-    } catch (error) {
-      console.error('Failed to fetch scripts:', error);
-      availableScripts.value = [];
-    }
+    availableScripts.value = await scriptApi.listScripts(filters);
   }
 
   function selectScript(scriptId: string) {
@@ -216,21 +211,26 @@ export const useGameStore = defineStore('game', () => {
   }
 
   async function createRoomWithScript(playerName: string, creatorId: string): Promise<string> {
-    const response = await fetch('/api/rooms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: playerName,
-        creator_id: creatorId,
-        script_id: selectedScriptId.value
-      })
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ detail: '创建房间失败' }));
-      throw new Error(err.detail || '创建房间失败');
+    try {
+      const response = await fetch('/api/rooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: playerName,
+          creator_id: creatorId,
+          script_id: selectedScriptId.value
+        })
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ detail: '创建房间失败' }));
+        throw new Error(err.detail || '创建房间失败');
+      }
+      const data = await response.json();
+      return data.game_id;
+    } catch (error) {
+      console.error('Failed to create room:', error);
+      throw error;
     }
-    const data = await response.json();
-    return data.game_id;
   }
 
   return {

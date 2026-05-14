@@ -46,27 +46,51 @@ export interface ScriptFilters {
 
 export const scriptApi = {
   async listScripts(filters?: ScriptFilters): Promise<ScriptMetadata[]> {
-    const params = new URLSearchParams();
-    if (filters?.genre) params.set('genre', filters.genre);
-    if (filters?.difficulty) params.set('difficulty', filters.difficulty);
-    if (filters?.min_players) params.set('min_players', filters.min_players.toString());
-    
-    const response = await fetch(`/api/scripts?${params}`);
-    const data = await response.json();
-    return data.scripts;
+    try {
+      const params = new URLSearchParams();
+      if (filters?.genre) params.set('genre', filters.genre);
+      if (filters?.difficulty) params.set('difficulty', filters.difficulty);
+      if (filters?.min_players) params.set('min_players', filters.min_players.toString());
+      
+      const response = await fetch(`/api/scripts?${params}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      return data.scripts || [];
+    } catch (error) {
+      console.error('Failed to fetch scripts:', error);
+      return [];
+    }
   },
 
   async getDetail(scriptId: string): Promise<ScriptDetail> {
-    const response = await fetch(`/api/scripts/${scriptId}`);
-    return response.json();
+    try {
+      const response = await fetch(`/api/scripts/${scriptId}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(`Failed to fetch script ${scriptId}:`, error);
+      throw error;
+    }
   },
 
   async uploadScript(script: Omit<ScriptDetail, 'id'>): Promise<{ script_id: string }> {
-    const response = await fetch('/api/scripts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(script)
-    });
-    return response.json();
+    try {
+      const response = await fetch('/api/scripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(script)
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to upload script:', error);
+      throw error;
+    }
   }
 };
