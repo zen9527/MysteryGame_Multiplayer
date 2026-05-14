@@ -196,6 +196,8 @@ async function testConnection() {
   try {
     const res = await fetch('/api/llm/providers/default/test', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}), // Empty body but needs Content-Type header
     });
     const data = await res.json();
     if (res.ok && data.status === 'connected') {
