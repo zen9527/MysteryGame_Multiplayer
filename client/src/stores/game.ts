@@ -66,6 +66,31 @@ export const useGameStore = defineStore('game', () => {
   const selectedScriptId = ref<string | null>(null);
   const availableScripts = ref<ScriptMetadata[]>([]);
 
+  // Request cancellation controllers
+  const requestControllers = new Map<string, AbortController>();
+
+  function cancelRequest(key: string) {
+    const controller = requestControllers.get(key);
+    if (controller) {
+      controller.abort();
+      requestControllers.delete(key);
+    }
+  }
+
+  function getOrCreateController(key: string): AbortController {
+    cancelRequest(key); // Cancel existing if any
+    const controller = new AbortController();
+    requestControllers.set(key, controller);
+    return controller;
+  }
+
+  function cancelAllRequests() {
+    for (const controller of requestControllers.values()) {
+      controller.abort();
+    }
+    requestControllers.clear();
+  }
+
   function _addPublicMessage(from: string, content: string, timestamp: string, isEvent = false) {
     // Key includes a counter to allow same content from same sender (e.g., rapid identical chat)
     // but still deduplicate on WS reconnect (same timestamp)
@@ -252,5 +277,10 @@ export const useGameStore = defineStore('game', () => {
     fetchScripts,
     selectScript,
     createRoomWithScript,
+    // Request cancellation
+    requestControllers,
+    cancelRequest,
+    getOrCreateController,
+    cancelAllRequests,
   };
 });

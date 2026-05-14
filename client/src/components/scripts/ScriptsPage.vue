@@ -97,7 +97,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import ScriptCard from './ScriptCard.vue';
 import ScriptFilter, { type FilterValues } from './ScriptFilter.vue';
 
@@ -120,8 +120,17 @@ const selectedScriptId = ref<string | null>(null);
 const loading = ref(false);
 
 const selectedScript = ref<ScriptMetadata | null>(null);
+const scriptsController = ref<AbortController | null>(null);
 
 async function fetchScripts() {
+  // Cancel previous request
+  if (scriptsController.value) {
+    scriptsController.value.abort();
+  }
+  
+  // Create new controller
+  scriptsController.value = new AbortController();
+  
   loading.value = true;
   try {
     const params = new URLSearchParams();
@@ -129,11 +138,16 @@ async function fetchScripts() {
     if (filters.value.difficulty) params.set('difficulty', filters.value.difficulty);
     if (filters.value.playerCount) params.set('player_count', filters.value.playerCount);
     
-    const response = await fetch(`/api/scripts?${params}`);
+    const response = await fetch(`/api/scripts?${params}`, {
+      signal: scriptsController.value.signal
+    });
     if (!response.ok) throw new Error('Failed to fetch scripts');
     scripts.value = await response.json();
   } catch (error) {
-    console.error('Failed to fetch scripts:', error);
+    if (error instanceof Error && error.name !== 'AbortError') {
+      console.error('Failed to fetch scripts:', error);
+    }
+    // Silently ignore abort errors
     scripts.value = [];
   } finally {
     loading.value = false;
@@ -190,6 +204,12 @@ async function deleteScript() {
 
 onMounted(() => {
   fetchScripts();
+});
+
+onUnmounted(() => {
+  if (scriptsController.value) {
+    scriptsController.value.abort();
+  }
 });
 </script>
 

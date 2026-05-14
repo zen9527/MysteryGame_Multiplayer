@@ -202,4 +202,69 @@ describe('Game Store', () => {
     ]);
     expect(store.publicMessages.length).toBe(1);
   });
+
+  // Request cancellation tests
+  it('should create and track abort controllers', () => {
+    const store = useGameStore();
+    
+    const controller = store.getOrCreateController('test-key');
+    
+    expect(controller).toBeInstanceOf(AbortController);
+    expect(store.requestControllers.has('test-key')).toBe(true);
+  });
+
+  it('should cancel existing controller when creating new one with same key', () => {
+    const store = useGameStore();
+    
+    const firstController = store.getOrCreateController('test-key');
+    const abortSpy = vi.spyOn(firstController.signal, 'aborted', 'get');
+    abortSpy.mockReturnValue(false);
+    
+    store.getOrCreateController('test-key');
+    
+    // Old controller should be aborted and removed
+    expect(store.requestControllers.has('test-key')).toBe(true);
+    expect(store.requestControllers.get('test-key')).not.toBe(firstController);
+  });
+
+  it('should cancel specific request by key', () => {
+    const store = useGameStore();
+    
+    const controller = store.getOrCreateController('test-key');
+    const abortSpy = vi.fn();
+    controller.signal.addEventListener('abort', abortSpy);
+    
+    store.cancelRequest('test-key');
+    
+    expect(abortSpy).toHaveBeenCalled();
+    expect(store.requestControllers.has('test-key')).toBe(false);
+  });
+
+  it('should cancel all requests', () => {
+    const store = useGameStore();
+    
+    const controller1 = store.getOrCreateController('key1');
+    const controller2 = store.getOrCreateController('key2');
+    const abortSpy1 = vi.fn();
+    const abortSpy2 = vi.fn();
+    
+    controller1.signal.addEventListener('abort', abortSpy1);
+    controller2.signal.addEventListener('abort', abortSpy2);
+    
+    store.cancelAllRequests();
+    
+    expect(abortSpy1).toHaveBeenCalled();
+    expect(abortSpy2).toHaveBeenCalled();
+    expect(store.requestControllers.size).toBe(0);
+  });
+
+  it('should handle abort errors silently', async () => {
+    const store = useGameStore();
+    const controller = store.getOrCreateController('test');
+    
+    // Simulate abort
+    controller.abort();
+    
+    expect(controller.signal.aborted).toBe(true);
+  });
 });
