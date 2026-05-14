@@ -22,6 +22,7 @@ describe('ScriptGenerateWizard', () => {
         plugins: [
           createTestingPinia({
             stubActions: false,
+            createSpy: vi.fn,
           }),
           router,
         ],
@@ -420,6 +421,7 @@ describe('ScriptGenerateWizard', () => {
           plugins: [
             createTestingPinia({
               stubActions: false,
+              createSpy: vi.fn,
             }),
             router,
           ],
