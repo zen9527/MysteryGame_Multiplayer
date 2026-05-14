@@ -14,8 +14,8 @@ describe('ScriptGenerator - SSE Generation', () => {
   });
 
   it('calls generation API with form data and parses SSE response', async () => {
-    // Mock SSE stream response
-    const mockSSEData = 'data: {"title":"Test Script","genre":"悬疑推理","difficulty":"中等","player_count":5}\n\n';
+    // Mock SSE stream response with new format (type: "done", data: {...})
+    const mockSSEData = 'data: {"type":"done","data":{"title":"Test Script","genre":"悬疑推理","difficulty":"中等","player_count":5}}\n\n';
     
     const mockReader = {
       read: vi.fn()
@@ -50,7 +50,7 @@ describe('ScriptGenerator - SSE Generation', () => {
       }),
     });
     
-    // Verify script was parsed and stored
+    // Verify script was parsed and stored (from data field)
     expect(store.generatedScript).toEqual({
       title: 'Test Script',
       genre: '悬疑推理',
@@ -86,7 +86,7 @@ describe('ScriptGenerator - SSE Generation', () => {
   });
 
   it('updates status during generation', async () => {
-    const mockSSEData = 'data: {}\n\n';
+    const mockSSEData = 'data: {"type":"done","data":{}}\n\n';
     
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -126,7 +126,7 @@ describe('ScriptGenerator - SSE Generation', () => {
         body: {
           getReader: () => ({
             read: vi.fn()
-              .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode('data: {"title":"Retry Success"}\n\n') })
+              .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode('data: {"type":"done","data":{"title":"Retry Success"}}\n\n') })
               .mockResolvedValueOnce({ done: true, value: undefined }),
             cancel: vi.fn().mockResolvedValue(undefined),
           }),
@@ -141,11 +141,7 @@ describe('ScriptGenerator - SSE Generation', () => {
     store.setPlayerCount(4);
     
     // First attempt - should fail
-    try {
-      await store.generateScript();
-    } catch (e) {
-      // Expected to fail
-    }
+    await store.generateScript();
     expect(store.error).not.toBeNull();
     
     // Clear error and retry

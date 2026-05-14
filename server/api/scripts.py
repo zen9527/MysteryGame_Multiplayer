@@ -1,14 +1,22 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from server.di import container
 from server.config import config
+import json
 
 router = APIRouter()
 
 
 def _get_service():
     return container.resolve("script_service")
+
+
+class ScriptGenerationRequest(BaseModel):
+    genre: str
+    difficulty: str = "中等"
+    estimated_time: int = 90
+    player_count: int = 4
 
 
 def require_script_admin(admin_key: str = Query(..., alias="admin_key")):
@@ -80,3 +88,41 @@ async def delete_script(script_id: str, admin: bool = Depends(require_script_adm
     if not _get_service().delete(script_id):
         raise HTTPException(status_code=404, detail="Script not found")
     return {"message": "Script deleted"}
+
+
+def _generate_script_standalone_generator(req: ScriptGenerationRequest):
+    """Generator for standalone script generation (no room context)."""
+    from server.script_engine.models import ScriptV2
+    script_gen = container.resolve("script_generator")
+
+    try:
+        yield f"data: {{\"type\": \"start\"}}\n\n"
+
+        full_text = ""
+        for chunk in script_gen.generate_stream(req.genre, req.difficulty, req.player_count, req.estimated_time):
+            full_text += chunk
+            yield f"data: {{\"type\": \"chunk\", \"content\": {json.dumps(chunk, ensure_ascii=False)}}}\n\n"
+
+        script_dict = script_gen.normalize_script_json(full_text)
+        script = ScriptV2(**script_dict)
+
+        # Return the full script data
+        script_data = script.model_dump()
+        yield f"data: {{\"type\": \"done\", \"data\": {json.dumps(script_data, ensure_ascii=False)}}}\n\n"
+    except Exception as e:
+        yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(str(e), ensure_ascii=False)}}}\n\n"
+
+
+@router.post("/scripts/generate")
+async def generate_script_standalone(req: ScriptGenerationRequest):
+    """Standalone script generation endpoint (no room required)."""
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        _generate_script_standalone_generator(req),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

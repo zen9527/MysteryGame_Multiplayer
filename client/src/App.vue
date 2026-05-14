@@ -9,9 +9,6 @@
 
 <script setup lang="ts">
 import CollapsibleSidebar from './components/common/CollapsibleSidebar.vue';
-import { useRoute } from 'vue-router';
-
-const route = useRoute();
 </script>
 
 <style>

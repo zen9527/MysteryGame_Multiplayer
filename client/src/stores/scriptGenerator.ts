@@ -111,22 +111,39 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
       
       // Parse SSE data line-by-line
       const events = accumulated.split('\n\n');
-      let lastDataChunk = '';
+      let lastDataEvent: { type: string; data?: any; message?: string } | null = null;
       
       for (const event of events) {
         if (event.startsWith('data:')) {
-          lastDataChunk = event.slice(5).trim();
+          try {
+            const data = JSON.parse(event.slice(5).trim());
+            lastDataEvent = data;
+            
+            // Update status based on event type
+            if (data.type === 'start') {
+              generationStatus.value = '开始生成...';
+            } else if (data.type === 'chunk') {
+              generationStatus.value = '正在生成剧本...';
+            } else if (data.type === 'error') {
+              error.value = data.message || '生成失败';
+              generationStatus.value = '生成失败';
+              return;
+            }
+          } catch (e) {
+            // Skip invalid JSON
+            continue;
+          }
         }
       }
       
-      if (!lastDataChunk) {
-        error.value = 'No valid data chunk found in SSE response';
+      if (!lastDataEvent || lastDataEvent.type !== 'done') {
+        error.value = 'No valid completion event found in SSE response';
         generationStatus.value = '生成失败';
         return;
       }
       
       try {
-        generatedScript.value = JSON.parse(lastDataChunk);
+        generatedScript.value = lastDataEvent.data;
       } catch (parseError) {
         error.value = `Failed to parse generated script: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`;
         generationStatus.value = '生成失败';
