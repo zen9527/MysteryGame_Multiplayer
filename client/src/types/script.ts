@@ -44,15 +44,22 @@ export interface ScriptFilters {
   min_players?: number;
 }
 
+export interface RequestOptions {
+  timeout?: number;
+  signal?: AbortSignal;
+}
+
+import { fetchWithTimeout } from '@/utils/request';
+
 export const scriptApi = {
-  async listScripts(filters?: ScriptFilters): Promise<ScriptMetadata[]> {
+  async listScripts(filters?: ScriptFilters, options?: RequestOptions): Promise<ScriptMetadata[]> {
     try {
       const params = new URLSearchParams();
       if (filters?.genre) params.set('genre', filters.genre);
       if (filters?.difficulty) params.set('difficulty', filters.difficulty);
       if (filters?.min_players) params.set('min_players', filters.min_players.toString());
       
-      const response = await fetch(`/api/scripts?${params}`);
+      const response = await fetchWithTimeout(`/api/scripts?${params}`, options);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -64,9 +71,9 @@ export const scriptApi = {
     }
   },
 
-  async getDetail(scriptId: string): Promise<ScriptDetail> {
+  async getDetail(scriptId: string, options?: RequestOptions): Promise<ScriptDetail> {
     try {
-      const response = await fetch(`/api/scripts/${scriptId}`);
+      const response = await fetchWithTimeout(`/api/scripts/${scriptId}`, options);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -77,12 +84,13 @@ export const scriptApi = {
     }
   },
 
-  async uploadScript(script: Omit<ScriptDetail, 'id'>): Promise<{ script_id: string }> {
+  async uploadScript(script: Omit<ScriptDetail, 'id'>, options?: RequestOptions): Promise<{ script_id: string }> {
     try {
-      const response = await fetch('/api/scripts', {
+      const response = await fetchWithTimeout('/api/scripts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(script)
+        body: JSON.stringify(script),
+        ...options,
       });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
