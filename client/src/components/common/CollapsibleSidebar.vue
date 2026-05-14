@@ -26,11 +26,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
 const isExpanded = ref(false);
+
+// Watch sidebar state and update CSS variable on body
+watch(isExpanded, (expanded) => {
+  document.body.style.setProperty('--sidebar-expanded', expanded ? '1' : '0');
+});
 
 const navItems = [
   { path: '/', icon: '🏠', label: '房间列表' },

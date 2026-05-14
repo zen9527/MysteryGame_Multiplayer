@@ -158,10 +158,18 @@ async function handleNext() {
   if (!store.canProceed) return;
   
   if (store.currentStep === 3) {
+    // Step 3: Generate script before moving to step 4
     await store.generateScript();
-    // Check if generation succeeded before proceeding
+    
+    // Check if generation succeeded
+    if (store.error) {
+      console.error('Script generation failed:', store.error);
+      return; // Stay on step 3 to show error and allow retry
+    }
+    
     if (!store.generatedScript) {
-      return; // Stay on step 4 to show error
+      console.error('Script generation completed but no script returned');
+      return;
     }
   }
   
