@@ -15,23 +15,22 @@
     <div class="split-view">
       <!-- Left: Script List -->
       <div class="script-list">
-        <div v-if="loading" class="loading-state">
-          <div class="spinner"></div>
-          <p>加载中...</p>
-        </div>
-        <div v-else-if="scripts.length === 0" class="empty-state">
-          <p>暂无剧本</p>
-          <router-link to="/scripts/generate" class="empty-action">
-            生成第一个剧本
-          </router-link>
-        </div>
-        <ScriptCard
-          v-for="script in scripts"
-          :key="script.id"
-          :script="script"
-          :active="selectedScriptId === script.id"
-          @click="selectScript(script.id)"
-        />
+        <ErrorBoundary ref="errorBoundaryRef" :on-retry="fetchScripts">
+          <LoadingSpinner v-if="loading" message="加载中..." />
+          <div v-else-if="scripts.length === 0" class="empty-state">
+            <p>暂无剧本</p>
+            <router-link to="/scripts/generate" class="empty-action">
+              生成第一个剧本
+            </router-link>
+          </div>
+          <ScriptCard
+            v-for="script in scripts"
+            :key="script.id"
+            :script="script"
+            :active="selectedScriptId === script.id"
+            @click="selectScript(script.id)"
+          />
+        </ErrorBoundary>
       </div>
 
       <!-- Right: Detail Panel -->
@@ -100,6 +99,8 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import ScriptCard from './ScriptCard.vue';
 import ScriptFilter, { type FilterValues } from './ScriptFilter.vue';
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+import ErrorBoundary from '@/components/common/ErrorBoundary.vue';
 
 interface ScriptMetadata {
   id: string;
@@ -121,6 +122,7 @@ const loading = ref(false);
 
 const selectedScript = ref<ScriptMetadata | null>(null);
 const scriptsController = ref<AbortController | null>(null);
+const errorBoundaryRef = ref<InstanceType<typeof ErrorBoundary> | null>(null);
 
 async function fetchScripts() {
   // Cancel previous request
@@ -146,6 +148,7 @@ async function fetchScripts() {
   } catch (error) {
     if (error instanceof Error && error.name !== 'AbortError') {
       console.error('Failed to fetch scripts:', error);
+      errorBoundaryRef.value?.setError(error as Error);
     }
     // Silently ignore abort errors
     scripts.value = [];
