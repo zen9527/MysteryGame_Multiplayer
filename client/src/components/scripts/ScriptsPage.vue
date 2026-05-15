@@ -255,14 +255,14 @@ onUnmounted(() => {
 
 .split-view {
   display: grid;
-  grid-template-columns: 1fr 400px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 400px);
   gap: var(--space-lg);
   height: calc(100% - 120px);
 }
 
 .script-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--space-md);
   overflow-y: auto;
   padding-right: var(--space-sm);

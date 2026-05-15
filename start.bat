@@ -4,6 +4,7 @@ title Script Murder - Start
 
 cd /d "%~dp0"
 echo === Starting Script Murder ===
+echo.
 
 REM Check Python
 python --version >nul 2>&1 || (echo ERROR: Python not found & pause & exit /b 1)
@@ -20,6 +21,25 @@ pip show fastapi >nul 2>&1 || (echo Installing backend... & pip install -r requi
 REM Create .env
 if not exist ".env" if exist ".env.example" copy .env.example .env >nul
 
+REM Check if ports are already in use
+echo.
+echo Checking ports...
+set PORTS_OCCUPIED=0
+for %%p in (8000, 3000) do (
+    netstat -ano | findstr ":%%p.*LISTENING" >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo   [!] Port %%p is already in use
+        set PORTS_OCCUPIED=1
+    )
+)
+
+if !PORTS_OCCUPIED! equ 1 (
+    echo.
+    echo Please run stop.bat first to free the ports, or manually kill the processes.
+    pause
+    exit /b 1
+)
+
 REM Start servers
 echo Starting backend (8000)...
 start "Backend" cmd /c "cd /d "%~dp0" && uvicorn server.main:app --host 0.0.0.0 --port 8000"
@@ -32,4 +52,6 @@ echo.
 echo === Servers Started ===
 echo   Backend: http://localhost:8000
 echo   Frontend: http://localhost:3000
+echo.
+echo To stop servers, run: stop.bat
 pause

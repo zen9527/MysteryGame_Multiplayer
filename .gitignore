@@ -9,3 +9,5 @@ dist/
 .worktrees/
 CLAUDE.md
 scripts.db
+client/playwright-report/
+client/test-results/

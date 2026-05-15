@@ -442,8 +442,15 @@ describe('ScriptGenerateWizard', () => {
       } as any;
       await wrapper.vm.$nextTick();
       
+      // Mock fetch for save script API
+      global.fetch = vi.fn().mockResolvedValue({ ok: true });
+      
       const confirmBtn = wrapper.find('.confirm-btn');
       await confirmBtn.trigger('click');
+      
+      // Wait for async fetch to complete
+      await wrapper.vm.$nextTick();
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       expect(pushSpy).toHaveBeenCalledWith('/scripts');
     });

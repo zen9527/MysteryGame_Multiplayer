@@ -22,11 +22,25 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
   const generationStatus = ref('');
   const generatedScript = ref<ScriptDetail | null>(null);
   const error = ref<string | null>(null);
+  
+  // Progress tracking
+  const currentProgressStep = ref(1);
+  const totalProgressSteps = ref(5);
+  const progressPercent = ref(0);
 
   // Constants
   const genres = ['悬疑推理', '古风权谋', '现代都市', '恐怖惊悚', '欢乐搞笑', '科幻未来'];
   const difficulties = ['简单', '中等', '困难'];
   const steps = [1, 2, 3, 4, 5];
+  
+  // Progress steps definition
+  const progressSteps = [
+    { name: '构建提示词' },
+    { name: '调用 AI' },
+    { name: '生成内容' },
+    { name: '解析验证' },
+    { name: '完成' },
+  ];
 
   // Computed
   const canProceed = computed(() => {
@@ -65,10 +79,21 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
     formData.value.playerCount = Math.max(3, Math.min(8, count));
   }
 
+  let currentAbortController: AbortController | null = null;
+  let isCancelled = ref(false);
+
   async function generateScript(signal?: AbortSignal) {
+    // Create a new abort controller for this request
+    currentAbortController = new AbortController();
+    const effectiveSignal = signal ?? currentAbortController.signal;
+    
     generating.value = true;
     generationStatus.value = '正在连接 LLM...';
     error.value = null;
+    isCancelled.value = false;
+    currentProgressStep.value = 1;
+    totalProgressSteps.value = 5;
+    progressPercent.value = 0;
     
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     
@@ -82,7 +107,7 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
           player_count: formData.value.playerCount,
           estimated_time: 90, // Default value
         }),
-        signal,
+        signal: effectiveSignal,
       });
       
       if (!response.ok) {
@@ -99,42 +124,79 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
       }
       
       const decoder = new TextDecoder();
-      let accumulated = '';
+      let buffer = '';
+      let lastDataEvent: { type: string; data?: any; message?: string } | null = null;
       
       while (true) {
+        // Check if cancelled before reading
+        if (isCancelled.value) {
+          console.log('Generation cancelled by user');
+          break;
+        }
+        
         const { done, value } = await reader.read();
         if (done) break;
         
         const chunk = decoder.decode(value);
-        accumulated += chunk;
-        generationStatus.value = '正在生成剧本...';
-      }
-      
-      // Parse SSE data line-by-line
-      const events = accumulated.split('\n\n');
-      let lastDataEvent: { type: string; data?: any; message?: string } | null = null;
-      
-      for (const event of events) {
-        if (event.startsWith('data:')) {
-          try {
-            const data = JSON.parse(event.slice(5).trim());
-            lastDataEvent = data;
-            
-            // Update status based on event type
-            if (data.type === 'start') {
-              generationStatus.value = '开始生成...';
-            } else if (data.type === 'chunk') {
-              generationStatus.value = '正在生成剧本...';
-            } else if (data.type === 'error') {
-              error.value = data.message || '生成失败';
-              generationStatus.value = '生成失败';
-              return;
+        buffer += chunk;
+        
+        // Process complete SSE events
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || ''; // Keep incomplete event in buffer
+        
+        for (const event of events) {
+          if (event.startsWith('data:')) {
+            try {
+              const data = JSON.parse(event.slice(5).trim());
+              
+              // Handle different event types
+              if (data.type === 'status') {
+                currentProgressStep.value = data.step;
+                totalProgressSteps.value = data.total_steps;
+                generationStatus.value = data.message;
+                
+                // Calculate progress percentage based on step
+                if (data.step === 5) {
+                  progressPercent.value = 100;
+                } else if (data.step === 3 && data.message) {
+                  // Step 3: backend sends actual progress percentage in message like "正在生成...(45%)"
+                  const match = data.message.match(/\((\d+)%\)/);
+                  if (match) {
+                    progressPercent.value = parseInt(match[1], 10);
+                  } else {
+                    progressPercent.value = Math.round((data.step / data.total_steps) * 90);
+                  }
+                } else {
+                  progressPercent.value = Math.round((data.step / data.total_steps) * 90);
+                }
+              } else if (data.type === 'chunk') {
+                // Advance to step 3 on first chunk if not already there
+                if (currentProgressStep.value < 3) {
+                  currentProgressStep.value = 3;
+                  progressPercent.value = 40;
+                }
+                generationStatus.value = '正在生成剧本内容...';
+              } else if (data.type === 'start') {
+                generationStatus.value = '开始生成...';
+              } else if (data.type === 'error') {
+                error.value = data.message || '生成失败';
+                generationStatus.value = '生成失败';
+                return;
+              } else if (data.type === 'done') {
+                lastDataEvent = data;
+              }
+            } catch (e) {
+              // Skip invalid JSON
+              continue;
             }
-          } catch (e) {
-            // Skip invalid JSON
-            continue;
           }
         }
+      }
+      
+      // If cancelled, exit early
+      if (isCancelled.value) {
+        generationStatus.value = '已取消';
+        return;
       }
       
       if (!lastDataEvent || lastDataEvent.type !== 'done') {
@@ -151,14 +213,36 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
         return;
       }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '未知错误';
-      generationStatus.value = '生成失败';
-      // Don't re-throw - handle error internally
+      // Handle abort/cancellation gracefully
+      if (isCancelled.value || (err instanceof Error && err.name === 'AbortError')) {
+        // Request was cancelled, don't show error
+        console.log('Generation cancelled');
+        generationStatus.value = '已取消';
+      } else {
+        error.value = err instanceof Error ? err.message : '未知错误';
+        generationStatus.value = '生成失败';
+        console.error('Generation error:', err);
+      }
     } finally {
       generating.value = false;
+      currentAbortController = null;
+      isCancelled.value = false;
       if (reader) {
-        await reader.cancel();
+        try {
+          await reader.cancel();
+        } catch (e) {
+          // Ignore cancel errors in finally block
+        }
       }
+    }
+  }
+
+  function cancelRequest() {
+    if (currentAbortController) {
+      isCancelled.value = true;
+      currentAbortController.abort();
+      currentAbortController = null;
+      console.log('Generation cancelled by user');
     }
   }
 
@@ -189,6 +273,10 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
     generationStatus,
     generatedScript,
     error,
+    progressSteps,
+    currentProgressStep,
+    totalProgressSteps,
+    progressPercent,
     genres,
     difficulties,
     steps,
@@ -201,6 +289,7 @@ export const useScriptGeneratorStore = defineStore('scriptGenerator', () => {
     selectDifficulty,
     setPlayerCount,
     generateScript,
+    cancelRequest,
     nextStep,
     prevStep,
     reset,

@@ -90,22 +90,147 @@ async def delete_script(script_id: str, admin: bool = Depends(require_script_adm
     return {"message": "Script deleted"}
 
 
+@router.put("/scripts/{script_id}")
+async def update_script(script_id: str, req: dict, admin: bool = Depends(require_script_admin)):
+    """Update a script and create a new version"""
+    service = _get_service()
+    
+    # Check if script exists
+    existing = service.get_detail(script_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Script not found")
+    
+    # Update the script
+    updated = service.update(script_id, req)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Script not found")
+    
+    # Create a version snapshot
+    version_repo = container.resolve("script_version_repository")
+    version_id = version_repo.create_version(
+        script_id=script_id,
+        data=req,
+        notes="Manual update"
+    )
+    
+    return {
+        "id": script_id,
+        "updated_at": updated.get("created_at"),
+        "version_id": version_id
+    }
+
+
+# Version management endpoints
+@router.get("/scripts/{script_id}/versions")
+async def get_script_versions(script_id: str):
+    """Get all versions for a script"""
+    version_repo = container.resolve("script_version_repository")
+    versions = version_repo.get_script_versions(script_id)
+    
+    # Return metadata only (not full data)
+    return {
+        "versions": [
+            {
+                "version_id": v["id"],
+                "version_number": v["version_number"],
+                "created_at": v["created_at"],
+                "created_by": v.get("created_by"),
+                "notes": v.get("notes")
+            }
+            for v in versions
+        ]
+    }
+
+
+@router.get("/scripts/{script_id}/versions/{version_id}")
+async def get_script_version(script_id: str, version_id: str):
+    """Get a specific version's full data"""
+    version_repo = container.resolve("script_version_repository")
+    version = version_repo.get_version(version_id)
+    
+    if not version or version["script_id"] != script_id:
+        raise HTTPException(status_code=404, detail="Version not found")
+    
+    return {
+        "version_id": version["id"],
+        "version_number": version["version_number"],
+        "created_at": version["created_at"],
+        "created_by": version.get("created_by"),
+        "notes": version.get("notes"),
+        "data": version["data"]
+    }
+
+
+@router.post("/scripts/{script_id}/versions/{version_id}/restore")
+async def restore_script_version(script_id: str, version_id: str, admin: bool = Depends(require_script_admin)):
+    """Restore a script to a specific version"""
+    version_repo = container.resolve("script_version_repository")
+    
+    restored = version_repo.restore_version(version_id)
+    if not restored or restored["script_id"] != script_id:
+        raise HTTPException(status_code=404, detail="Version not found")
+    
+    return {
+        "message": "Version restored",
+        "new_version_id": restored["id"],
+        "restored_from": version_id
+    }
+
+
+@router.get("/scripts/versions/compare")
+async def compare_versions(
+    version_id_1: str = Query(..., description="First version ID"),
+    version_id_2: str = Query(..., description="Second version ID")
+):
+    """Compare two versions"""
+    version_repo = container.resolve("script_version_repository")
+    result = version_repo.compare_versions(version_id_1, version_id_2)
+    
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    
+    return result
+
+
 def _generate_script_standalone_generator(req: ScriptGenerationRequest):
     """Generator for standalone script generation (no room context)."""
     from server.script_engine.models import ScriptV2
     script_gen = container.resolve("script_generator")
 
     try:
+        # Step 1: Building prompt
+        yield f"data: {{\"type\": \"status\", \"step\": 1, \"total_steps\": 5, \"message\": \"正在构建提示词...\"}}\n\n"
+        
         yield f"data: {{\"type\": \"start\"}}\n\n"
 
+        # Step 2: Calling LLM (send status BEFORE the call so frontend doesn't hang)
+        yield f"data: {{\"type\": \"status\", \"step\": 2, \"total_steps\": 5, \"message\": \"正在调用 AI 生成剧本...\"}}\n\n"
+        
         full_text = ""
+        chunk_count = 0
         for chunk in script_gen.generate_stream(req.genre, req.difficulty, req.player_count, req.estimated_time):
             full_text += chunk
+            chunk_count += 1
+            
+            # Send progress updates every 10 chunks for smoother progress
+            if chunk_count % 10 == 0:
+                # Map chunk progress to 40%-85% range (step 2 ends at 36%, step 4 starts at ~80%)
+                progress = min(85, 40 + int((chunk_count / 400) * 45))
+                msg = f"正在生成剧本内容... ({progress}%)"
+                status_event = {"type": "status", "step": 3, "total_steps": 5, "message": msg}
+                yield f"data: {json.dumps(status_event, ensure_ascii=False)}\n\n"
+            
             yield f"data: {{\"type\": \"chunk\", \"content\": {json.dumps(chunk, ensure_ascii=False)}}}\n\n"
 
+        # Step 4: Parsing and normalizing
+        yield f"data: {{\"type\": \"status\", \"step\": 4, \"total_steps\": 5, \"message\": \"正在解析和验证剧本...\"}}\n\n"
+        
         script_dict = script_gen.normalize_script_json(full_text)
         script = ScriptV2(**script_dict)
 
+        # Step 5: Complete
+        yield f"data: {{\"type\": \"status\", \"step\": 5, \"total_steps\": 5, \"message\": \"剧本生成完成！\"}}\n\n"
+        
         # Return the full script data
         script_data = script.model_dump()
         yield f"data: {{\"type\": \"done\", \"data\": {json.dumps(script_data, ensure_ascii=False)}}}\n\n"

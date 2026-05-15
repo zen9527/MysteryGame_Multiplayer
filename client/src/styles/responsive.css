@@ -1,0 +1,179 @@
+/* client/src/styles/responsive.css */
+/* Responsive Design for 1080p and smaller screens */
+
+/* Base responsive adjustments */
+@media (max-width: 1366px) {
+  :root {
+    --space-xl: 16px;
+    --space-2xl: 20px;
+    --space-3xl: 24px;
+  }
+}
+
+/* Scripts Page - Split View Optimization */
+@media (max-width: 1200px) {
+  .split-view {
+    grid-template-columns: 1fr 320px !important;
+    gap: var(--space-md) !important;
+  }
+  
+  .scripts-header h1 {
+    font-size: 24px !important;
+  }
+  
+  .script-list {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .split-view {
+    grid-template-columns: 1fr 280px !important;
+  }
+  
+  .script-list {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
+  }
+  
+  .panel-header h2 {
+    font-size: 16px !important;
+  }
+}
+
+/* Mobile - Stack Layout */
+@media (max-width: 768px) {
+  .split-view {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+  }
+  
+  .detail-panel {
+    max-height: 50vh !important;
+  }
+  
+  .scripts-page {
+    padding: var(--space-md) !important;
+  }
+  
+  .script-list {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Script Editor - Responsive Layout */
+@media (max-width: 1200px) {
+  .editor-sidebar {
+    width: 160px !important;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .editor-header {
+    flex-direction: column !important;
+    gap: var(--space-md) !important;
+    align-items: stretch !important;
+  }
+  
+  .header-actions {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+  
+  .editor-sidebar {
+    width: 100% !important;
+    height: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-light) !important;
+  }
+  
+  .section-nav {
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    padding-bottom: var(--space-sm) !important;
+  }
+  
+  .editor-content {
+    padding: var(--space-md) !important;
+  }
+}
+
+/* Wizard - Responsive */
+@media (max-width: 768px) {
+  .script-wizard {
+    padding: var(--space-md) !important;
+  }
+  
+  .wizard-header h1 {
+    font-size: 24px !important;
+  }
+  
+  .progress-container {
+    padding: var(--space-md) !important;
+  }
+  
+  .progress-percent {
+    font-size: 20px !important;
+  }
+}
+
+/* Game Page - Responsive */
+@media (max-width: 1024px) {
+  .game-container {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .chat-panel, .info-panel {
+    max-height: 40vh !important;
+  }
+}
+
+/* General Improvements */
+@media (max-width: 1200px) {
+  /* Reduce font sizes slightly */
+  body {
+    font-size: 14px !important;
+  }
+  
+  h1 {
+    font-size: 24px !important;
+  }
+  
+  h2 {
+    font-size: 20px !important;
+  }
+  
+  h3 {
+    font-size: 18px !important;
+  }
+}
+
+/* Touch-friendly targets for mobile */
+@media (hover: none) and (pointer: coarse) {
+  button, a {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+  
+  .nav-item, .action-btn {
+    padding: var(--space-md) !important;
+  }
+}
+
+/* Print styles */
+@media print {
+  .editor-header, .editor-sidebar, .wizard-nav, .wizard-footer {
+    display: none !important;
+  }
+  
+  .editor-content {
+    padding: 0 !important;
+  }
+  
+  .card {
+    break-inside: avoid !important;
+  }
+}

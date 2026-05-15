@@ -62,10 +62,52 @@
         <div v-if="store.generating || store.generatedScript || store.error" class="generation-section">
           <h3>剧本生成</h3>
           
-          <!-- Loading State -->
+          <!-- Loading State with Progress -->
           <div v-if="store.generating" class="generation-status">
-            <div class="spinner"></div>
-            <p>{{ store.generationStatus }}</p>
+            <div class="progress-container">
+              <div class="progress-header">
+                <span class="step-indicator">步骤 {{ store.currentProgressStep || 1 }}/{{ store.totalProgressSteps || 5 }}</span>
+                <span class="progress-percent">{{ store.progressPercent || 0 }}%</span>
+              </div>
+              
+              <!-- Progress Bar -->
+              <div class="progress-bar">
+                <div 
+                  class="progress-fill" 
+                  :style="{ width: (store.progressPercent || 0) + '%' }"
+                ></div>
+              </div>
+              
+              <!-- Status Message -->
+              <div class="status-message">
+                <div class="spinner"></div>
+                <p>{{ store.generationStatus }}</p>
+              </div>
+            </div>
+            
+              <!-- Progress Details -->
+            <div class="progress-details">
+              <div 
+                v-for="(step, index) in store.progressSteps" 
+                :key="index"
+                class="progress-step"
+                :class="{ 
+                  'completed': (store.currentProgressStep || 1) > index + 1,
+                  'active': (store.currentProgressStep || 1) === index + 1,
+                  'pending': (store.currentProgressStep || 1) < index + 1
+                }"
+              >
+                <div class="step-icon">
+                  <span v-if="(store.currentProgressStep || 1) > index + 1">✓</span>
+                  <span v-else-if="(store.currentProgressStep || 1) === index + 1">●</span>
+                  <span v-else>○</span>
+                </div>
+                <div class="step-info">
+                  <span class="step-name">{{ step.name }}</span>
+                  <span v-if="(store.currentProgressStep || 1) === index + 1" class="step-desc">{{ store.generationStatus }}</span>
+                </div>
+              </div>
+            </div>
           </div>
           
           <!-- Success Preview -->
@@ -159,7 +201,8 @@
 
     <!-- Cancel Button -->
     <div class="wizard-footer">
-      <router-link to="/scripts" class="cancel-btn">取消</router-link>
+      <button v-if="store.generating" @click="handleCancel" class="cancel-btn">取消生成</button>
+      <router-link v-else to="/scripts" class="cancel-btn">取消</router-link>
     </div>
   </div>
 </template>
@@ -213,12 +256,35 @@ function retryGeneration() {
   store.generateScript();
 }
 
+function handleCancel() {
+  if (store.generating) {
+    store.cancelRequest();
+  }
+}
+
 async function confirmScript() {
   if (!store.generatedScript) return;
   
-  // TODO: Save script to backend (if needed)
-  // For now, just redirect to scripts list
-  router.push('/scripts');
+  try {
+    const adminKey = new URLSearchParams(window.location.search).get('admin_key') ?? '';
+    const response = await fetch(`/api/scripts?admin_key=${encodeURIComponent(adminKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(store.generatedScript),
+    });
+    
+    if (response.ok) {
+      // Save successful, reset store and redirect
+      store.reset();
+      router.push('/scripts');
+    } else {
+      const errorData = await response.json().catch(() => ({}));
+      alert(`保存失败: ${errorData.detail || '未知错误'}`);
+    }
+  } catch (err) {
+    console.error('Failed to save script:', err);
+    alert('保存失败，请检查网络连接');
+  }
 }
 
 function regenerate() {
@@ -230,19 +296,13 @@ function regenerate() {
 @import '../../styles/variables.css';
 
 .script-wizard {
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
-  padding: var(--space-2xl);
-}
-
-/* Header */
-.wizard-header {
-  text-align: center;
-  margin-bottom: var(--space-3xl);
+  padding: var(--space-xl);
 }
 
 .wizard-header h1 {
-  font-size: 28px;
+  font-size: 24px;
   color: var(--text-primary);
   margin-bottom: var(--space-xl);
 }
@@ -458,6 +518,144 @@ function regenerate() {
   align-items: center;
   gap: var(--space-lg);
   padding: var(--space-2xl);
+}
+
+/* Progress Container */
+.progress-container {
+  width: 100%;
+  max-width: 100%;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  border: 1px solid var(--border-light);
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.step-indicator {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.progress-percent {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+/* Progress Bar */
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-round);
+  overflow: hidden;
+  margin-bottom: var(--space-lg);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary-light));
+  border-radius: var(--radius-round);
+  transition: width 0.3s ease;
+}
+
+/* Status Message */
+.status-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+}
+
+.status-message .spinner {
+  width: 24px;
+  height: 24px;
+  border-width: 3px;
+}
+
+.status-message p {
+  font-size: 16px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Progress Details */
+.progress-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.progress-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.progress-step.active {
+  background: var(--accent-primary-light);
+}
+
+.progress-step.completed {
+  opacity: 0.7;
+}
+
+.step-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.progress-step.active .step-icon {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.progress-step.completed .step-icon {
+  background: var(--accent-success);
+  color: white;
+}
+
+.step-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.step-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.progress-step.pending .step-name {
+  color: var(--text-muted);
 }
 
 .spinner {

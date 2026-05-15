@@ -49,6 +49,7 @@ describe('ScriptGenerator - SSE Generation', () => {
         player_count: 5,
         estimated_time: 90, // Added default value
       }),
+      signal: expect.any(AbortSignal), // Added abort controller signal
     });
     
     // Verify script was parsed and stored (from data field)

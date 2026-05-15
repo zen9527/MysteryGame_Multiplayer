@@ -28,6 +28,7 @@ def register_services(container):
     from server.game_manager import GameManager
     from server.websocket_hub import WebSocketHub
     from server.script_repository import ScriptRepository
+    from server.script_version_repository import ScriptVersionRepository
     from server.script_service import ScriptService
     from server.script_engine.generator import ScriptGenerator
     from server.llm.registry import LLMRegistry
@@ -51,6 +52,7 @@ def register_services(container):
     container.register("game_manager", GameManager, singleton=True)
     container.register("websocket_hub", WebSocketHub, singleton=True)
     container.register("script_repository", ScriptRepository, singleton=True)
+    container.register("script_version_repository", ScriptVersionRepository, singleton=True)
     container.register("script_service", lambda: ScriptService(container.resolve("script_repository")), singleton=True)
     container.register("script_generator", lambda: ScriptGenerator(container.resolve("llm_registry")), singleton=True)
 

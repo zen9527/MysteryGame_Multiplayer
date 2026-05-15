@@ -100,5 +100,38 @@ export const scriptApi = {
       console.error('Failed to upload script:', error);
       throw error;
     }
+  },
+
+  async updateScript(scriptId: string, script: any, options?: RequestOptions): Promise<{ id: string; updated_at: string }> {
+    try {
+      const response = await fetchWithTimeout(`/api/scripts/${scriptId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(script),
+        ...options,
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(`Failed to update script ${scriptId}:`, error);
+      throw error;
+    }
+  },
+
+  async deleteScript(scriptId: string, options?: RequestOptions): Promise<void> {
+    try {
+      const response = await fetchWithTimeout(`/api/scripts/${scriptId}`, {
+        method: 'DELETE',
+        ...options,
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      console.error(`Failed to delete script ${scriptId}:`, error);
+      throw error;
+    }
   }
 };

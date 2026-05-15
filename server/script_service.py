@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict
+import json
 from server.models import ScriptMetadata, ScriptDetail
 from server.script_repository import ScriptRepository
 
@@ -51,6 +52,29 @@ class ScriptService:
     def upload(self, script_data: Dict) -> str:
         """Upload a new script"""
         return self.repo.create(script_data)
+    
+    def update(self, script_id: str, script_data: Dict) -> Optional[Dict]:
+        """Update an existing script"""
+        # Check if script exists
+        existing = self.repo.get(script_id)
+        if not existing:
+            return None
+        
+        # Update the script
+        self.repo.conn.execute(
+            """UPDATE scripts 
+               SET title = ?, genre = ?, difficulty = ?, player_count = ?, 
+                   estimated_time = ?, background_story = ?, full_content = ?
+               WHERE id = ?""",
+            (script_data.get("title"), script_data.get("genre"),
+             script_data.get("difficulty"), script_data.get("player_count"),
+             script_data.get("estimated_time"), script_data.get("background_story"),
+             json.dumps(script_data), script_id)
+        )
+        self.repo.conn.commit()
+        
+        # Return updated script
+        return self.get_detail(script_id)
     
     def delete(self, script_id: str) -> bool:
         """Soft delete a script"""

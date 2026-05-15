@@ -79,11 +79,13 @@ export async function fetchWithTimeout(
     // Wait before retry (exponential backoff)
     if (attempt < retries && !externalSignal?.aborted) {
       const delay = retryDelay * Math.pow(2, attempt);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      // Check again after waiting
-      if (externalSignal?.aborted) {
-        throw new DOMException('Aborted', 'AbortError');
-      }
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => resolve(true), delay);
+        externalSignal?.addEventListener('abort', () => {
+          clearTimeout(timeout);
+          reject(new DOMException('Aborted', 'AbortError'));
+        }, { once: true });
+      });
     }
     
     attempt++;
