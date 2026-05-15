@@ -4,6 +4,11 @@ import type { WSMessage } from '../types/ws';
 import type { ScriptMetadata, ScriptFilters } from '../types/script';
 import { scriptApi } from '../types/script';
 import { ACT_BANNER_DISMISS_MS } from '../constants';
+import { 
+  validateChatMessage, 
+  validateClue, 
+  validateRoleCard 
+} from '@/utils/schema-validation';
 
 export interface RoleCardData {
   name?: string;
@@ -121,14 +126,19 @@ export const useGameStore = defineStore('game', () => {
         break;
       case 'role_assigned':
         break;
-      case 'chat':
+      case 'chat': {
+        // Validate chat message before processing
+        const result = validateChatMessage(msg);
+        if (!result.success || !result.data) {
+          console.error('Failed to validate chat message:', result.error);
+          break;
+        }
         // Public chat — add to publicMessages (deduplicated)
-        _addPublicMessage(msg.from, msg.content, msg.timestamp || '');
+        // Use from_player_name as the display name
+        _addPublicMessage(result.data.from_player_name, result.data.content, result.data.timestamp || '');
         break;
-      case 'private_chat': {
-        const chatKey = `pc:${msg.from}:${msg.content}:${msg.timestamp || ''}`;
-        if (seenPrivateKeys.value.has(chatKey)) break;
-        seenPrivateKeys.value.add(chatKey);
+      }
+      case 'private_chat':
         privateMessages.value.push({
           from: msg.from,
           content: msg.content,
@@ -137,10 +147,22 @@ export const useGameStore = defineStore('game', () => {
         break;
       }
       case 'role_card': {
+        // Validate role card data before processing
+        const result = validateRoleCard(msg.data);
+        if (!result.success || !result.data) {
+          console.error('Failed to validate role card:', result.error);
+          break;
+        }
         const layer = msg.layer as '1' | '2' | '3';
-        if (layer === '1') roleCard.value.layer1 = msg.data as RoleCardData;
-        else if (layer === '2') roleCard.value.layer2 = msg.data as RoleCardData;
-        else if (layer === '3') roleCard.value.layer3 = msg.data as RoleCardData;
+        // Map validated role card to store's RoleCardData format
+        const roleCardData: RoleCardData = {
+          name: result.data.role_name,
+          description: result.data.content,
+          secret_task: result.data.secrets?.[0],
+        };
+        if (layer === '1') roleCard.value.layer1 = roleCardData;
+        else if (layer === '2') roleCard.value.layer2 = roleCardData;
+        else if (layer === '3') roleCard.value.layer3 = roleCardData;
         break;
       }
       case 'dm_private': {
@@ -155,10 +177,23 @@ export const useGameStore = defineStore('game', () => {
         break;
       }
       case 'clue_unlock': {
-        const clue = msg.clue as ClueData;
+        // Validate clue data before processing
+        const result = validateClue(msg.clue);
+        if (!result.success || !result.data) {
+          console.error('Failed to validate clue:', result.error);
+          break;
+        }
+        // Map validated clue to store's ClueData format
+        const clueData: ClueData = {
+          id: result.data.id,
+          title: result.data.title,
+          content: result.data.content,
+          content_hint: '', // Default empty - may need to be added to schema
+          is_red_herring: false, // Default false - may need to be added to schema
+        };
         // Avoid duplicate clues
-        if (!clues.value.some(c => c.id === clue.id)) {
-          clues.value.push(clue);
+        if (!clues.value.some(c => c.id === clueData.id)) {
+          clues.value.push(clueData);
         }
         break;
       }

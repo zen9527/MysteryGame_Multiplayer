@@ -1,5 +1,4 @@
-// Note: This file is optional and currently disabled due to missing shared schemas
-// import { wsSchemas, type ChatMessage, type Clue, type RoleCard } from "@shared/schemas/ws";
+import { wsSchemas, type ChatMessage, type Clue, type RoleCard } from "@shared/schemas/ws";
 
 /**
  * Validation result type
@@ -13,25 +12,49 @@ export interface ValidationResult<T> {
 /**
  * Validate chat message from server or WebSocket
  */
-export function validateChatMessage(raw: unknown): ValidationResult<Record<string, unknown>> {
-  // Placeholder - actual implementation requires shared schemas
-  return { success: true, data: raw as Record<string, unknown> };
+export function validateChatMessage(raw: unknown): ValidationResult<ChatMessage> {
+  const result = wsSchemas.chatMessage.safeParse(raw);
+  
+  if (!result.success) {
+    return {
+      success: false,
+      error: `Invalid chat message: ${result.error.message}`
+    };
+  }
+  
+  return { success: true, data: result.data };
 }
 
 /**
  * Validate clue from server or WebSocket
  */
-export function validateClue(raw: unknown): ValidationResult<Record<string, unknown>> {
-  // Placeholder - actual implementation requires shared schemas
-  return { success: true, data: raw as Record<string, unknown> };
+export function validateClue(raw: unknown): ValidationResult<Clue> {
+  const result = wsSchemas.clue.safeParse(raw);
+  
+  if (!result.success) {
+    return {
+      success: false,
+      error: `Invalid clue: ${result.error.message}`
+    };
+  }
+  
+  return { success: true, data: result.data };
 }
 
 /**
  * Validate role card from server or WebSocket
  */
-export function validateRoleCard(raw: unknown): ValidationResult<Record<string, unknown>> {
-  // Placeholder - actual implementation requires shared schemas
-  return { success: true, data: raw as Record<string, unknown> };
+export function validateRoleCard(raw: unknown): ValidationResult<RoleCard> {
+  const result = wsSchemas.roleCard.safeParse(raw);
+  
+  if (!result.success) {
+    return {
+      success: false,
+      error: `Invalid role card: ${result.error.message}`
+    };
+  }
+  
+  return { success: true, data: result.data };
 }
 
 /**
